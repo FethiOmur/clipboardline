@@ -212,6 +212,8 @@
 "View recent copies" = "View recent copies";
 "Watch" = "Vigilar";
 "Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Watch up to three folders for new images. Removing a folder leaves its files untouched.";
+"When you press the period key twice" = "Al pulsar dos veces la tecla de punto";
+"The double period only works in other apps once this app is allowed to see key presses." = "El doble punto solo funciona en otras apps cuando esta app tiene permiso para ver las pulsaciones de teclas.";
 "When something new hangs" = "Cuando se cuelga algo nuevo";
 "When the pointer rests in the menu bar" = "Al dejar el puntero en la barra de menús";
 "You can restore them from Library → Trash. Original files stay in place." = "You can restore them from Library → Trash. Original files stay in place.";

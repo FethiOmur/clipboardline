@@ -212,6 +212,8 @@
 "View recent copies" = "View recent copies";
 "Watch" = "지켜보기";
 "Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Watch up to three folders for new images. Removing a folder leaves its files untouched.";
+"When you press the period key twice" = "마침표 키를 두 번 누를 때";
+"The double period only works in other apps once this app is allowed to see key presses." = "마침표 두 번 누르기는 이 앱에 키 입력 확인 권한이 허용된 경우에만 다른 앱에서 동작합니다.";
 "When something new hangs" = "새 항목이 걸릴 때";
 "When the pointer rests in the menu bar" = "포인터가 메뉴 막대에 머무를 때";
 "You can restore them from Library → Trash. Original files stay in place." = "You can restore them from Library → Trash. Original files stay in place.";

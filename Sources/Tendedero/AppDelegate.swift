@@ -74,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }()
     private var signalSources: [DispatchSourceSignal] = []
     private var hotKey: HotKey?
+    private var doubleDot: DoubleDotToggle?
     private var copyHotKey: HotKey?
     private var libraryHotKey: HotKey?
     private var searchHotKey: HotKey?
@@ -162,9 +163,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Out of the box, the first two are on and the third off.
 
     /// Resting the pointer in the menu bar. Off, only the shortcut and the
-    /// menu open it.
+    /// menu open it. This fork starts with it off; a saved choice wins.
     static var opensFromMenuBar: Bool {
-        get { !UserDefaults.standard.bool(forKey: "menuBarRevealOff") }
+        get { !(UserDefaults.standard.object(forKey: "menuBarRevealOff") as? Bool ?? true) }
         set { UserDefaults.standard.set(!newValue, forKey: "menuBarRevealOff") }
     }
 
@@ -249,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshTextSources()
 
         registerShortcut()
+        doubleDot = DoubleDotToggle { [weak self] in self?.toggle() }
 
         registerCopyShortcut(line.copyLatestShortcut, persist: false)
         registerLibraryShortcut(line.libraryShortcut, persist: false)
@@ -1054,6 +1056,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.setSearchShortcut = { [weak self] in self?.registerSearchShortcut($0) }
             model.recordSearchShortcut = { [weak self] in self?.recordSearchShortcut() }
             model.requestPastePermission = { [weak self] in self?.showPastePermission() }
+            model.syncDoubleDot = { [weak self] in self?.doubleDot?.sync() }
             model.recordContextShortcut = { [weak self] in self?.recordContextShortcut($0) }
             model.openLibrary = { [weak self] in self?.showLibrary() }
             model.setScreenshots = { [weak self] in self?.setInbox($0) }

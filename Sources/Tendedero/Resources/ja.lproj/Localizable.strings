@@ -212,6 +212,8 @@
 "View recent copies" = "View recent copies";
 "Watch" = "監視";
 "Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Watch up to three folders for new images. Removing a folder leaves its files untouched.";
+"When you press the period key twice" = "ピリオドキーを2回押したとき";
+"The double period only works in other apps once this app is allowed to see key presses." = "ピリオド2回押しは、このアプリにキー入力の監視が許可されている場合のみ他のアプリでも機能します。";
 "When something new hangs" = "新しいものが吊るされたとき";
 "When the pointer rests in the menu bar" = "ポインタがメニューバーにとどまったとき";
 "You can restore them from Library → Trash. Original files stay in place." = "You can restore them from Library → Trash. Original files stay in place.";

@@ -212,6 +212,8 @@
 "View recent copies" = "View recent copies";
 "Watch" = "İzlə";
 "Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Watch up to three folders for new images. Removing a folder leaves its files untouched.";
+"When you press the period key twice" = "Nöqtə düyməsi iki dəfə basılanda";
+"The double period only works in other apps once this app is allowed to see key presses." = "Qoşa nöqtə başqa tətbiqlərdə yalnız bu tətbiqə düymə basışlarını görmək icazəsi veriləndə işləyir.";
 "When something new hangs" = "Yeni bir şey asılanda";
 "When the pointer rests in the menu bar" = "Göstərici menyu panelində dayananda";
 "You can restore them from Library → Trash. Original files stay in place." = "You can restore them from Library → Trash. Original files stay in place.";

@@ -35,6 +35,7 @@ final class SettingsModel: ObservableObject {
     var setSearchShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordSearchShortcut: () -> Void = {}
     var requestPastePermission: () -> Void = {}
+    var syncDoubleDot: () -> Void = {}
     var recordContextShortcut: (KeyboardAction) -> Void = { _ in }
     var openLibrary: () -> Void = {}
     var setScreenshots: (Bool) -> Void = { _ in }
@@ -239,6 +240,15 @@ private struct SettingsView: View {
             } header: { Text(L("Library")) }
             Section(L("Bring the line down")) {
                 Toggle(L("When the pointer rests in the menu bar"), isOn: model.binding(get: { AppDelegate.opensFromMenuBar }, set: { AppDelegate.opensFromMenuBar = $0 }))
+                Toggle(L("When you press the period key twice"), isOn: model.binding(get: { DoubleDotToggle.isEnabled }, set: { DoubleDotToggle.isEnabled = $0; model.syncDoubleDot() }))
+                if DoubleDotToggle.isEnabled && model.needsPastePermission {
+                    Text(L("The double period only works in other apps once this app is allowed to see key presses.")).font(.caption).foregroundStyle(.secondary)
+                    if #available(macOS 27, *) {
+                        Button(L("Open Device Control and Data Access"), action: model.requestPastePermission)
+                    } else {
+                        Button(L("Open Accessibility Settings"), action: model.requestPastePermission)
+                    }
+                }
                 Toggle(L("When something new hangs"), isOn: model.binding(get: { AppDelegate.peeksAtNew }, set: { AppDelegate.peeksAtNew = $0 }))
                 Toggle(L("Over full screen apps"), isOn: model.binding(get: { FullScreen.showLineOver }, set: { FullScreen.showLineOver = $0; model.refreshVisibility() }))
             }

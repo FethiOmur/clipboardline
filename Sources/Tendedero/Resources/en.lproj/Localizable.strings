@@ -212,6 +212,8 @@
 "View recent copies" = "View recent copies";
 "Watch" = "Watch";
 "Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Watch up to three folders for new images. Removing a folder leaves its files untouched.";
+"When you press the period key twice" = "When you press the period key twice";
+"The double period only works in other apps once this app is allowed to see key presses." = "The double period only works in other apps once this app is allowed to see key presses.";
 "When something new hangs" = "When something new hangs";
 "When the pointer rests in the menu bar" = "When the pointer rests in the menu bar";
 "You can restore them from Library → Trash. Original files stay in place." = "You can restore them from Library → Trash. Original files stay in place.";

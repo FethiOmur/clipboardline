@@ -212,6 +212,8 @@
 "View recent copies" = "Son kopyaları göster";
 "Watch" = "İzle";
 "Watch up to three folders for new images. Removing a folder leaves its files untouched." = "Yeni görseller için en fazla üç klasör izleyin. İzlemeyi durdurmak dosyaları değiştirmez.";
+"When you press the period key twice" = "Nokta tuşuna iki kez basıldığında";
+"The double period only works in other apps once this app is allowed to see key presses." = "Çift nokta, diğer uygulamalarda ancak bu uygulamaya tuş basışlarını görme izni verildiğinde çalışır.";
 "When something new hangs" = "Yeni bir şey asıldığında";
 "When the pointer rests in the menu bar" = "İşaretçi menü çubuğunda durduğunda";
 "You can restore them from Library → Trash. Original files stay in place." = "Kütüphane → Çöp’ten geri yükleyebilirsiniz. Orijinal dosyalar yerinde kalır.";
