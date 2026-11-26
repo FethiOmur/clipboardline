@@ -25,6 +25,16 @@ struct ShelfSearchFocus: Equatable {
 /// app and every Space except full screen ones, takes keyboard focus for browsing, and lets clicks pass through
 /// everywhere except over the photos.
 final class LinePanel: NSPanel {
+    /// Where the panel sits and which way it slides. `.top` is the original
+    /// strip under the menu bar. `.right` is the image stack: a narrow column
+    /// at the right edge of the screen that slides in from the right; its size
+    /// comes from `edgeSize`, and `contentHeight` is ignored.
+    enum Edge { case top, right }
+    let edge: Edge
+    /// The right-edge stack's size. Unused for `.top`.
+    var edgeSize = CGSize(width: 200, height: 600) {
+        didSet { if edge == .right && !shelfRevealed && !isShelfTransitioning { setShelfOffset(hiddenShelfOffset) } }
+    }
     private let reduceMotion: () -> Bool
     private var visibilityGeneration = 0
     private let compositor = ShelfCompositorView()
@@ -32,9 +42,19 @@ final class LinePanel: NSPanel {
     private var shelfRevealed = false
     private(set) var isShelfTransitioning = false
     static let shelfAnimationKey = "shelfRevealTranslation"
-    var shelfModelOffset: CGFloat { compositor.layer?.sublayerTransform.m42 ?? 0 }
-    var shelfPresentationOffset: CGFloat { compositor.layer?.presentation()?.sublayerTransform.m42 ?? shelfModelOffset }
-    private var hiddenShelfOffset: CGFloat { -(contentHeight + 12) }
+    var shelfModelOffset: CGFloat { compositor.layer.map { offset(of: $0.sublayerTransform) } ?? 0 }
+    var shelfPresentationOffset: CGFloat { compositor.layer?.presentation().map { offset(of: $0.sublayerTransform) } ?? shelfModelOffset }
+    private var hiddenShelfOffset: CGFloat {
+        switch edge {
+        case .top: -(contentHeight + 12)
+        // Past the right edge of the panel, which is the edge of the screen.
+        case .right: edgeSize.width + 12
+        }
+    }
+    private func offset(of transform: CATransform3D) -> CGFloat { edge == .right ? transform.m41 : transform.m42 }
+    private func translation(_ offset: CGFloat) -> CATransform3D {
+        edge == .right ? CATransform3DMakeTranslation(offset, 0, 0) : CATransform3DMakeTranslation(0, offset, 0)
+    }
 #if STANDALONE_TESTS
     @objc var shelfAnimationLayerForTesting: CALayer? { compositor.layer }
     @objc var shelfHostingLayoutCountForTesting: Int { (hostedContent as? ShelfHostingLayoutCounting)?.shelfLayoutCount ?? 0 }
@@ -118,7 +138,8 @@ final class LinePanel: NSPanel {
         }
     }
 
-    init(content: NSView, reduceMotion: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }) {
+    init(content: NSView, edge: Edge = .top, reduceMotion: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }) {
+        self.edge = edge
         self.reduceMotion = reduceMotion
         self.hostedContent = content
         super.init(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
@@ -164,7 +185,8 @@ final class LinePanel: NSPanel {
         let children = childWindows ?? []
         children.forEach { removeChildWindow($0) }
         orderOut(nil)
-        let fresh = LinePanel(content: hostedContent, reduceMotion: reduceMotion)
+        let fresh = LinePanel(content: hostedContent, edge: edge, reduceMotion: reduceMotion)
+        fresh.edgeSize = edgeSize
         fresh.keyboardFocusAllowed = keyboardFocusAllowed
         fresh.onKey = onKey
         fresh.onCommandKey = onCommandKey
@@ -186,7 +208,7 @@ final class LinePanel: NSPanel {
     private func setShelfOffset(_ offset: CGFloat) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        compositor.layer?.sublayerTransform = CATransform3DMakeTranslation(0, offset, 0)
+        compositor.layer?.sublayerTransform = translation(offset)
         CATransaction.commit()
     }
 
@@ -201,7 +223,8 @@ final class LinePanel: NSPanel {
         compositor.layer?.removeAnimation(forKey: Self.shelfAnimationKey)
         shelfRevealed = on
         let target: CGFloat = on ? 0 : hiddenShelfOffset
-        let duration: TimeInterval = animated && !reduceMotion() ? (on ? 0.42 : 0.22) : 0
+        let duration: TimeInterval = animated && !reduceMotion()
+            ? (edge == .right ? (on ? 0.34 : 0.22) : (on ? 0.42 : 0.22)) : 0
         isShelfTransitioning = duration > 0 && abs(current - target) > 0.01
         // NSView hit testing uses the unchanged model geometry. Accept pointer
         // actions only once the translated cards reach those coordinates.
@@ -210,12 +233,15 @@ final class LinePanel: NSPanel {
         setShelfOffset(target)
         if isShelfTransitioning {
             let animation = CABasicAnimation(keyPath: "sublayerTransform")
-            animation.fromValue = NSValue(caTransform3D: CATransform3DMakeTranslation(0, current, 0))
-            animation.toValue = NSValue(caTransform3D: CATransform3DMakeTranslation(0, target, 0))
+            animation.fromValue = NSValue(caTransform3D: translation(current))
+            animation.toValue = NSValue(caTransform3D: translation(target))
             animation.duration = duration
             animation.beginTime = compositor.layer?.convertTime(CACurrentMediaTime(), from: nil) ?? CACurrentMediaTime()
+            // The stack eases in without the strip's small overshoot, like the
+            // system's own screenshot thumbnail.
             animation.timingFunction = on
-                ? CAMediaTimingFunction(controlPoints: 0.2, 1.12, 0.3, 1)
+                ? (edge == .right ? CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+                                  : CAMediaTimingFunction(controlPoints: 0.2, 1.12, 0.3, 1))
                 : CAMediaTimingFunction(controlPoints: 0.4, 0, 1, 1)
             compositor.layer?.add(animation, forKey: Self.shelfAnimationKey)
         }
@@ -238,8 +264,19 @@ final class LinePanel: NSPanel {
 
     func placeOnScreen(_ screen: NSScreen? = nil) {
         guard let visible = (screen ?? LinePanel.screenUnderPointer())?.visibleFrame else { return }
-        let target = NSRect(x: visible.minX, y: visible.maxY - contentHeight,
+        let target: NSRect
+        switch edge {
+        case .top:
+            target = NSRect(x: visible.minX, y: visible.maxY - contentHeight,
                             width: visible.width, height: contentHeight)
+        case .right:
+            // Flush with the right edge, vertically centred: clear of the
+            // notification banners at the top right and of the system's
+            // screenshot thumbnail at the bottom right.
+            let size = CGSize(width: min(edgeSize.width, visible.width), height: min(edgeSize.height, visible.height))
+            target = NSRect(x: visible.maxX - size.width, y: (visible.midY - size.height / 2).rounded(),
+                            width: size.width, height: size.height)
+        }
         // Presentation follows placement/capacity in the same turn. Do not
         // force a synchronous SwiftUI draw before that final state is ready.
         if frame != target { setFrame(target, display: false) }

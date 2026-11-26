@@ -61,5 +61,18 @@ final class MenuBarRevealDefaultTests: XCTestCase {
         AppDelegate.opensFromMenuBar = false
         XCTAssertFalse(AppDelegate.opensFromMenuBar)
     }
+
+    func testShowingOverFullScreenStartsOnAndKeepsASavedChoice() {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "showOverFullScreen")
+        defer { if let saved { defaults.set(saved, forKey: "showOverFullScreen") } else { defaults.removeObject(forKey: "showOverFullScreen") } }
+
+        defaults.removeObject(forKey: "showOverFullScreen")
+        XCTAssertTrue(FullScreen.showLineOver)
+        FullScreen.showLineOver = false
+        XCTAssertFalse(FullScreen.showLineOver)
+        FullScreen.showLineOver = true
+        XCTAssertTrue(FullScreen.showLineOver)
+    }
 }
 #endif

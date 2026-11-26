@@ -13,10 +13,11 @@ enum FullScreen {
     private static let fullScreenSpaceType = 4
 
     /// Whether the line also comes down over full screen apps, so screenshots
-    /// stay within reach while you work in one. Off unless turned on: a video
-    /// or a presentation should not get a clothesline across the top.
+    /// stay within reach while you work in one. On unless switched off in
+    /// Settings: the stack behaves like the system's own screenshot thumbnail,
+    /// which shows over full screen apps.
     static var showLineOver: Bool {
-        get { UserDefaults.standard.bool(forKey: "showOverFullScreen") }
+        get { UserDefaults.standard.object(forKey: "showOverFullScreen") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "showOverFullScreen") }
     }
 

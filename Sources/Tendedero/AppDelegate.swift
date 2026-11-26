@@ -33,14 +33,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             line = Line(defaults: UserDefaults(suiteName: "local.clipboardline.recovery")!, inbox: Inbox.folder.appendingPathComponent("Recovery"), breeze: false, pruneOnLoad: false)
         }
         clipboardSource = nil; watchesFiles = true
+        presentsEdgeStack = true
         isolatedCopyBoard = nil
         ownsKeyboardFocus = { NSApp?.keyWindow != nil }
         directPaste = DirectPasteCoordinator()
         super.init()
     }
 
-    init(line: Line, clipboardSource: (any ClipboardSource)? = nil, watchesFiles: Bool = true, copyPasteboard: NSPasteboard? = nil, directPaste: DirectPasteCoordinator? = nil, ownsKeyboardFocus: (@MainActor () -> Bool)? = nil) {
+    /// The app shows the image stack at the right edge (`EdgeStackView`) in
+    /// place of the strip under the menu bar. The test initializer keeps the
+    /// strip so the existing strip tests still describe what they test.
+    let presentsEdgeStack: Bool
+
+    init(line: Line, clipboardSource: (any ClipboardSource)? = nil, watchesFiles: Bool = true, copyPasteboard: NSPasteboard? = nil, directPaste: DirectPasteCoordinator? = nil, ownsKeyboardFocus: (@MainActor () -> Bool)? = nil, presentsEdgeStack: Bool = false) {
         self.line = line
+        self.presentsEdgeStack = presentsEdgeStack
         startupError = nil
         isolatedCopyBoard = copyPasteboard
         self.directPaste = directPaste ?? DirectPasteCoordinator()
@@ -179,9 +186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         EditingMenu.install(onSettings: { [weak self] in self?.showSettings() })
         if startupError != nil { setUpStatusItem(); DispatchQueue.main.async { [weak self] in self?.showStartupFailure() }; return }
-        let host = ShelfHostingView(rootView: LineView(line: line))
-        host.sizingOptions = []
-        panel = LinePanel(content: host)
+        if presentsEdgeStack {
+            let host = ShelfHostingView(rootView: EdgeStackView(line: line))
+            host.sizingOptions = []
+            panel = LinePanel(content: host, edge: .right)
+        } else {
+            let host = ShelfHostingView(rootView: LineView(line: line))
+            host.sizingOptions = []
+            panel = LinePanel(content: host)
+        }
         panel.onBeforeMouseKeyFocus = { [weak self] in self?.capturePasteTarget() }
         panel.searchEditorTarget = { [weak line] in
             guard let line, let shelf = line.searchEditingShelf else { return nil }
@@ -189,13 +202,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         panel.contentHeight = line.panelHeight
         panel.onScrollLocation = { [weak self] point in
-            guard let self else { return }
+            guard let self, !self.presentsEdgeStack else { return }
             let index = max(0, min(self.line.presentation.shelves.count - 1, Int((self.panel.frame.height - point.y) / Layout.panelHeight)))
             self.line.focusShelf(self.line.presentation.shelves[index], requestFocus: false)
         }
         panel.onScroll = { [weak self] x, y, precise in
             guard let self else { return }
-            if self.line.showingTexts {
+            // The stack shows only images; a vertical swipe moves it.
+            if self.presentsEdgeStack { self.line.scroll(horizontal: 0, vertical: y, precise: precise) }
+            else if self.line.showingTexts {
                 let delta = abs(x) > abs(y) ? x : y
                 self.line.texts.scroll(delta * (precise ? 1 : 24), width: self.line.viewportWidth)
             } else if self.line.activeShelf == .links { self.line.links.scroll((abs(x) > abs(y) ? x : y) * (precise ? 1 : 24), width: self.line.viewportWidth) }
@@ -492,10 +507,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         updateCapacity()
         wanted = true
         refresh()
-        if Self.peeksAtNew { reveal(peekFor: 2.5) }
+        if Self.peeksAtNew { reveal(peekFor: presentsEdgeStack ? EdgeStackLayout.peekDuration : 2.5) }
     }
     private var visibleCount: Int {
-        (line.presentation.shelves.contains(.images) ? line.liveCount : 0)
+        if presentsEdgeStack { return line.liveCount }
+        return (line.presentation.shelves.contains(.images) ? line.liveCount : 0)
         + (line.presentation.shelves.contains(.texts) ? line.texts.displayEntries.count : 0)
         + (line.presentation.shelves.contains(.links) ? line.links.displayEntries.count : 0)
     }
@@ -505,7 +521,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// A new screenshot lifts off from where it was taken and flies to its
     /// place on the line. Without a known capture area it simply drops in.
     private func hangCapture(_ url: URL) {
-        guard line.presentation.shelves.contains(.images) else {
+        guard presentsEdgeStack || line.presentation.shelves.contains(.images) else {
             line.hang(url)
             return
         }
@@ -517,8 +533,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func presentCapture(_ url: URL) {
-        let from = captureRect(of: url)
-        let screen = from.flatMap { from in
+        let captured = captureRect(of: url)
+        let screen = captured.flatMap { from in
             NSScreen.screens.first { NSMouseInRect(CGPoint(x: from.midX, y: from.midY), $0.frame, false) }
         }
         // Every capture brings the line down before it hangs, on the screen it
@@ -526,6 +542,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // the new one flies in.
         let wasRevealed = isRevealed
         comeDown(on: screen)
+        // The stack does not fly the capture in: the card simply appears at
+        // the top as the stack slides in, like the system's thumbnail.
+        let from = presentsEdgeStack ? nil : captured
         guard let id = line.hang(url, flying: from != nil) else {
             // Nothing hung after all, so an empty line goes away again.
             itemsChanged()
@@ -581,7 +600,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Where a card will hang, in screen coordinates, using the same layout
     /// as the line view.
     private func cardFrame(for id: UUID) -> CGRect? {
-        guard line.presentation.shelves.contains(.images), let index = line.displayItems.firstIndex(where: { $0.id == id }) else { return nil }
+        // The stack has no flight or fall: removed cards leave in place.
+        guard !presentsEdgeStack, line.presentation.shelves.contains(.images), let index = line.displayItems.firstIndex(where: { $0.id == id }) else { return nil }
         let width = panel.frame.width
         let x = Layout.x(index: index, scrollOffset: line.scrollOffset)
         let viewTop = Layout.ropeY(x: x, width: width) - Layout.pinAbove
@@ -804,8 +824,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // The line's zone runs from its lowest point up to the top of the
         // screen, menu bar included, so moving up never hides it.
+        // The stack's zone is just its own column at the right edge.
         var zone = panel.frame
-        if let screen = panel.screen { zone.size.height = screen.frame.maxY - zone.minY }
+        if !presentsEdgeStack, let screen = panel.screen { zone.size.height = screen.frame.maxY - zone.minY }
         let inside = NSMouseInRect(mouse, zone, false)
         if inside && pinned { pinned = false }
 
@@ -850,7 +871,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var overPhoto = line.hitRects.values.contains { $0.insetBy(dx: -4, dy: -4).contains(flipped) }
         // A line longer than the screen also takes the band the photos hang
         // in, gaps included, so a swipe anywhere along it moves it.
-        if !overPhoto {
+        // The stack accepts the pointer over its cards only.
+        if !overPhoto && !presentsEdgeStack {
             overPhoto = line.scrollableShelfBandContains(flipped)
         }
         if panel.ignoresMouseEvents == overPhoto {
@@ -913,7 +935,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateCapacity() {
         let start = ProcessInfo.processInfo.systemUptime
         defer { recordShelfPresentation("panel.layout", since: start) }
-        if let screen = panel.screen ?? LinePanel.screenUnderPointer() { line.fitShelves(in: screen.visibleFrame.height) }
+        let screen = panel.screen ?? LinePanel.screenUnderPointer()
+        if let screen { line.fitShelves(in: screen.visibleFrame.height) }
+        if presentsEdgeStack {
+            // The stack's size follows the size setting and the screen height;
+            // the model gets the strip width that maps onto the stack's rows.
+            let scale = EdgeStackLayout.scale(preferred: line.size.scale, availableHeight: screen?.visibleFrame.height ?? .infinity)
+            let size = EdgeStackLayout.panelSize(scale: scale)
+            if panel.edgeSize != size { panel.edgeSize = size; panel.placeOnScreen(panel.screen) }
+            line.setViewportWidth(EdgeStackLayout.lineViewportWidth(spacing: Layout.spacing, edgePadding: Layout.edgePadding))
+            return
+        }
         if panel.contentHeight != line.panelHeight { panel.contentHeight = line.panelHeight; panel.placeOnScreen(panel.screen) }
         line.setViewportWidth(panel.frame.width)
     }
@@ -1152,7 +1184,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func focusLine(preservePasteTarget: Bool = false) {
-        guard isRevealed else { return }
+        // The stack never takes keyboard focus: the frontmost app keeps it
+        // whether the stack peeks in, is toggled open or a card is clicked.
+        guard isRevealed, !presentsEdgeStack else { return }
         let start = ProcessInfo.processInfo.systemUptime
         defer { recordShelfPresentation("panel.focus", since: start) }
         pointerFocus = false
