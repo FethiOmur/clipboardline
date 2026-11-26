@@ -38,7 +38,6 @@ struct Pegged: Identifiable, Equatable {
 @MainActor
 final class Line: ObservableObject {
     @Published private(set) var items: [Pegged] = [] { didSet { filteredItems = nil; cachedSelectedItems = nil } }
-    @Published private(set) var gust = 0
     @Published var copiedID: UUID?
     private var copyFeedbackGeneration = 0
     @Published var draggingID: UUID?
@@ -919,7 +918,8 @@ final class Line: ObservableObject {
         $favoritesOnly.dropFirst().sink { [weak shelfSearch] in shelfSearch?.setFavoritesOnly($0, for: .image) }.store(in: &shelfSearchFilterSubscriptions)
         texts.$favoritesOnly.dropFirst().sink { [weak shelfSearch] in shelfSearch?.setFavoritesOnly($0, for: .text) }.store(in: &shelfSearchFilterSubscriptions)
         links.$favoritesOnly.dropFirst().sink { [weak shelfSearch] in shelfSearch?.setFavoritesOnly($0, for: .link) }.store(in: &shelfSearchFilterSubscriptions)
-        if breeze { scheduleGust() }
+        // `breeze` is ignored: the sway is gone. The parameter stays so callers keep compiling.
+        _ = breeze
     }
 
     // MARK: Hanging and dropping
@@ -1146,20 +1146,6 @@ final class Line: ObservableObject {
     func reveal(_ id: UUID) {
         guard let item = items.first(where: { $0.id == id }) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([item.url])
-    }
-
-    // MARK: Breeze
-
-    /// Every so often a little wind moves the line. It is the detail that
-    /// makes it feel like an object and not a widget.
-    private func scheduleGust() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + .random(in: 7...16)) { [weak self] in
-            guard let self else { return }
-            // Tucked away, nobody sees the sway; a gust would still re-render
-            // every view that watches the line.
-            if self.revealed && !self.items.isEmpty && self.draggingID == nil { self.gust += 1 }
-            self.scheduleGust()
-        }
     }
 
     // MARK: Persistence

@@ -1,13 +1,12 @@
 import SwiftUI
 
-/// One photo with its clothespin. All the charm lives here: it drops onto
-/// the line, swings, sways with the breeze and falls when you pull it off.
+/// One photo with its clothespin: it drops onto the line and falls when you
+/// pull it off. It does not swing or sway.
 struct PeggedView: View {
     let item: Pegged
     @ObservedObject var line: Line
     let quickNumber: Int?
 
-    @State private var swing: Double = 0
     @State private var arrived = false
     @State private var hovering = false
 
@@ -22,7 +21,7 @@ struct PeggedView: View {
                 .zIndex(1)
             card
         }
-        .rotationEffect(.degrees(swing + item.tilt), anchor: .top)
+        .rotationEffect(.degrees(item.tilt), anchor: .top)
         .offset(y: arrived ? 0 : -46)
         // The fall itself is drawn over the whole screen by CaptureFlight, so
         // the card here just steps aside at once.
@@ -30,9 +29,6 @@ struct PeggedView: View {
         .transaction { t in if item.falling { t.animation = nil } }
         .animation(.easeOut(duration: 0.16), value: item.flying)
         .onAppear(perform: arrive)
-        .onChange(of: item.flying) { was, now in if was && !now { land() } }
-        .onChange(of: line.gust) { _, _ in breeze() }
-        .onChange(of: copied) { _, isCopied in if isCopied { nudge(3) } }
     }
 
     /// The photo fits inside the card area keeping its proportions, so the
@@ -141,28 +137,7 @@ struct PeggedView: View {
             return
         }
         guard line.consumeArrival(item.id) else { arrived = true; return }
-        swing = 16
         withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) { arrived = true }
-        withAnimation(.interpolatingSpring(stiffness: 46, damping: 2.6)) { swing = 0 }
-    }
-
-    /// Landing after the flight: no jump, just a small sway from rest.
-    private func land() {
-        nudge(2.2)
-    }
-
-    private func breeze() {
-        let delay = Double.random(in: 0...0.35)
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            nudge(Double.random(in: 1.6...3.4))
-        }
-    }
-
-    private func nudge(_ degrees: Double) {
-        withAnimation(.easeOut(duration: 0.3)) { swing = degrees }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.interpolatingSpring(stiffness: 38, damping: 2.4)) { swing = 0 }
-        }
     }
 }
 
