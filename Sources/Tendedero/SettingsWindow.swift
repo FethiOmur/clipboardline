@@ -45,6 +45,8 @@ final class SettingsModel: ObservableObject {
     var changeToggleShortcut: () -> Void = {}
     var setCopyShortcut: (KeyShortcut?) -> Void = { _ in }
     var recordCopyShortcut: () -> Void = {}
+    var setRegionTextShortcut: (KeyShortcut?) -> Void = { _ in }
+    var recordRegionTextShortcut: () -> Void = {}
     var changeLogin: () -> Void = {}
     var clearHistory: (LibraryKind?) -> Void = { _ in }
     var reopenForLanguage: () -> Void = {}
@@ -364,6 +366,14 @@ private struct SettingsView: View {
                     if let custom = line.copyLatestShortcut, model.copyShortcutChoice == -2 { Text(custom.title).tag(-2) }
                 }
                 Button(L("Record shortcut…"), action: model.recordCopyShortcut)
+            }
+            Section(L("Copy text from a screen area")) {
+                LabeledContent(L("Shortcut")) { Text(line.regionTextShortcut?.title ?? L("Off")).monospaced() }
+                HStack {
+                    Button(L("Record shortcut…"), action: model.recordRegionTextShortcut)
+                    Button(L("Off")) { model.setRegionTextShortcut(nil); model.refresh() }
+                }
+                Text(L("Drag over any part of the screen; the text in it goes to the clipboard.")).font(.caption).foregroundStyle(.secondary)
             }
             Section(L("Browsing shortcuts")) {
                 Text(L("Single keys work while browsing the line, Library or a preview. Typing and standard editing shortcuts stay with the editor.")).font(.caption).foregroundStyle(.secondary)

@@ -35,9 +35,11 @@ final class ClipboardWatcher {
     private var lastCount: Int?
     static var ownChangeCount = -1
 
-    /// No registered default: a missing preference is false.
+    /// Whether copied images are hung. A saved choice wins over the default.
     static var isEnabled: Bool {
-        get { UserDefaults.standard.bool(forKey: "clipboardEnabled") }
+        // On unless switched off in Settings: copied images, including
+        // screenshots taken to the clipboard, are what the stack is for.
+        get { UserDefaults.standard.object(forKey: "clipboardEnabled") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "clipboardEnabled") }
     }
 
@@ -66,12 +68,22 @@ final class ClipboardWatcher {
         guard timer == nil else { return }
         // Enabling or re-enabling never imports the clipboard's previous contents.
         lastCount = source.changeCount
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
+        timer.tolerance = Self.pollTolerance
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
     }
+
+    /// macOS has no clipboard change notification, so the change count is
+    /// polled: once a second, with slack so the system can fold the wake
+    /// into others. Reading the count is one cheap call to the pasteboard
+    /// server; nothing else runs unless it changed.
+    static let pollInterval: TimeInterval = 1
+    static let pollTolerance: TimeInterval = 0.2
+    /// The running poll, for tests.
+    var pollTimer: Timer? { timer }
 
     func stop() {
         timer?.invalidate()

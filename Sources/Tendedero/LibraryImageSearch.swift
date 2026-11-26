@@ -17,12 +17,31 @@ import Vision
             if store?.changedKinds.contains(.image) == true { self?.refresh() }
         }
     }
-    func start() {
-        refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
+    /// Whether new and changed images are read for text and visual search.
+    /// Off unless switched on (defaults key `imageSearchIndexing`): reading
+    /// every copied image costs seconds of CPU and over a hundred megabytes,
+    /// and text on screen is copied with the screen-area shortcut instead.
+    /// Off, nothing is scanned and no timer runs; search still uses whatever
+    /// was indexed before.
+    static var isEnabled: Bool {
+        get { UserDefaults.standard.bool(forKey: "imageSearchIndexing") }
+        set { UserDefaults.standard.set(newValue, forKey: "imageSearchIndexing") }
     }
+    func start() {
+        guard Self.isEnabled else { return }
+        refresh()
+        // New and changed library images are scanned as the store reports
+        // them. This catch-up only finds image files edited by other apps,
+        // which matter once the Library is searched; showing the Library
+        // also runs it. Rare, with slack, so an idle app does not wake for it.
+        let timer = Timer(timeInterval: Self.catchUpInterval, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } }
+        timer.tolerance = Self.catchUpInterval / 6
+        RunLoop.main.add(timer, forMode: .default); self.timer = timer
+    }
+    static let catchUpInterval: TimeInterval = 30 * 60
     func stop() { scheduled?.cancel(); subscription?.cancel(); timer?.invalidate(); worker.cancel() }
     func refresh() {
+        guard Self.isEnabled else { return }
         scheduled?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }

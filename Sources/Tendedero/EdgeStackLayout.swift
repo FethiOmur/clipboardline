@@ -38,6 +38,12 @@ enum EdgeStackLayout {
 
     static func pitch(scale: CGFloat) -> CGFloat { slot(scale: scale).height + gap }
 
+    /// How much of the panel's top and bottom margin is cut away, so that the
+    /// card before the first visible one and the card after the last never
+    /// show an edge: they start one `gap` beyond the visible cards, and this
+    /// leaves one point less than that for the visible cards' shadow.
+    static var clipInset: CGFloat { margin - (gap - 1) }
+
     /// The height of the area that shows `visibleCount` cards.
     static func viewportHeight(scale: CGFloat) -> CGFloat {
         CGFloat(visibleCount) * slot(scale: scale).height + CGFloat(visibleCount - 1) * gap

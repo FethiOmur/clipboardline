@@ -11,6 +11,12 @@ struct KeyShortcut: Codable, Equatable {
         return (0..<128).contains(keyCode) && modifiers & (controlKey | cmdKey) != 0
             && modifiers & ~allowed == 0 && !keyLabel.isEmpty
     }
+    /// The "copy text from a screen area" shortcut also accepts Option-Shift
+    /// with a key (its default is Option-Shift-X), which the other global
+    /// shortcuts do not.
+    var isValidForRegionText: Bool {
+        isValid || ((0..<128).contains(keyCode) && modifiers == (optionKey | shiftKey) && !keyLabel.isEmpty)
+    }
     var isValidLocal: Bool { (0..<128).contains(keyCode) && modifiers & ~(controlKey | optionKey | shiftKey | cmdKey) == 0 && !keyLabel.isEmpty }
     var title: String {
         (modifiers & controlKey != 0 ? "⌃" : "") + (modifiers & optionKey != 0 ? "⌥" : "")

@@ -67,4 +67,68 @@ final class ScreenshotWatcherLifecycleTests: XCTestCase {
         XCTAssertEqual(reports[marker.standardizedFileURL.path], 1)
         XCTAssertEqual(reports[nextCapture.standardizedFileURL.path], 1)
     }
+
+    /// The folder's identity is polled only once a minute while its parent is
+    /// watched, so the parent watch must survive the parent being replaced:
+    /// a folder replaced inside the new parent is still seen within seconds.
+    func testWatcherFollowsFolderReplacedInsideAReplacedParent() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("watcher-parent-\(UUID())")
+        let parent = root.appendingPathComponent("Parent", isDirectory: true)
+        let folder = parent.appendingPathComponent("Captures", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let fixture = try SyntheticFixture(folderRoot: root)
+        defer { fixture.cleanup() }
+        let imageData = try Data(contentsOf: try fixture.image(owned: false))
+        let first = folder.appendingPathComponent("after-parent-replaced.png")
+        let second = folder.appendingPathComponent("after-folder-replaced.png")
+        let third = folder.appendingPathComponent("next-capture.png")
+        let baselineScanned = expectation(description: "initial watcher scan completed")
+        let firstCaptured = expectation(description: "image in the replaced parent reported")
+        let secondCaptured = expectation(description: "image in the folder replaced inside the new parent reported")
+        let thirdCaptured = expectation(description: "next capture in the replacement folder reported")
+        var baselineReady = false
+        var seen = Set<String>()
+
+        let watcher = ScreenshotWatcher(folder: folder, anyImage: true, onNew: { url in
+            let path = url.standardizedFileURL.path
+            guard seen.insert(path).inserted else { return }
+            if path == first.standardizedFileURL.path { firstCaptured.fulfill() }
+            if path == second.standardizedFileURL.path { secondCaptured.fulfill() }
+            if path == third.standardizedFileURL.path { thirdCaptured.fulfill() }
+        }, onChange: {
+            if !baselineReady { baselineReady = true; baselineScanned.fulfill() }
+        })
+        defer { watcher.stop() }
+        watcher.start()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            try? Data("warm up".utf8).write(to: folder.appendingPathComponent("warmup.txt"))
+        }
+        wait(for: [baselineScanned], timeout: 3)
+        XCTAssertEqual(watcher.identityPollInterval, ScreenshotWatcher.identityPollWithParentWatch)
+        XCTAssertGreaterThanOrEqual(watcher.identityPollInterval, 30, "a watched parent must not need a fast poll")
+
+        try FileManager.default.moveItem(at: parent, to: root.appendingPathComponent("Parent old", isDirectory: true))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try imageData.write(to: first)
+        wait(for: [firstCaptured], timeout: 3)
+
+        // Let the parent watch settle on the new parent before replacing again.
+        let settled = expectation(description: "parent rewatched")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { settled.fulfill() }
+        wait(for: [settled], timeout: 2)
+        try FileManager.default.moveItem(at: folder, to: parent.appendingPathComponent("Captures old", isDirectory: true))
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try imageData.write(to: second)
+        wait(for: [secondCaptured], timeout: 3)
+
+        // The old descriptor can list the replacement once; only a rebind
+        // through the (re)watched parent reports a capture after that.
+        let later = expectation(description: "late scans settled")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { later.fulfill() }
+        wait(for: [later], timeout: 2)
+        try imageData.write(to: third)
+        wait(for: [thirdCaptured], timeout: 3)
+    }
 }

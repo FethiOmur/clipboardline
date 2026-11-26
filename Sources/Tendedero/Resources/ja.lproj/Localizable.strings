@@ -540,3 +540,10 @@
 "This image could not be opened for markup." = "この画像をマークアップ用に開けませんでした。";
 "Markup supports images up to 80 megapixels." = "マークアップは最大8,000万画素の画像に対応しています。";
 "The marked image could not be rendered." = "マークアップした画像をレンダリングできませんでした。";
+
+/* Copy text from a screen area. */
+"Copy text from a screen area" = "画面の領域からテキストをコピー";
+"Drag over any part of the screen; the text in it goes to the clipboard." = "画面の任意の範囲をドラッグすると、その中のテキストがクリップボードにコピーされます。";
+"Text copied" = "テキストをコピーしました";
+"No text found in the selected area" = "選択した領域にテキストが見つかりません";
+"Allow screen recording for this app to copy text from the screen" = "画面からテキストをコピーするには、このアプリに画面収録を許可してください";

@@ -29,11 +29,15 @@ final class TextClipboardWatcher {
     func start() {
         guard timer == nil else { return }
         lastCount = source.changeCount
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+        // Same cadence and slack as the image watcher; the system may fold the two wakes.
+        let timer = Timer(timeInterval: ClipboardWatcher.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.check() }
         }
+        timer.tolerance = ClipboardWatcher.pollTolerance
         RunLoop.main.add(timer, forMode: .common); self.timer = timer
     }
+    /// The running poll, for tests.
+    var pollTimer: Timer? { timer }
     func stop() { timer?.invalidate(); timer = nil; lastCount = nil }
     func check() {
         guard timer != nil else { return }

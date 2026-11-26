@@ -540,3 +540,10 @@
 "This image could not be opened for markup." = "Bu şəkil işarələmə üçün açıla bilmədi.";
 "Markup supports images up to 80 megapixels." = "İşarələmə 80 meqapiksələ qədər şəkilləri dəstəkləyir.";
 "The marked image could not be rendered." = "İşarələnmiş şəkil hazırlana bilmədi.";
+
+/* Copy text from a screen area. */
+"Copy text from a screen area" = "Ekran sahəsindən mətn kopyala";
+"Drag over any part of the screen; the text in it goes to the clipboard." = "Ekranın istənilən hissəsini sürüşdürərək seçin; içindəki mətn buferə kopyalanır.";
+"Text copied" = "Mətn kopyalandı";
+"No text found in the selected area" = "Seçilmiş sahədə mətn tapılmadı";
+"Allow screen recording for this app to copy text from the screen" = "Ekrandan mətn kopyalamaq üçün bu tətbiqə ekran yazısı icazəsi verin";

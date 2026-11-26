@@ -540,3 +540,10 @@
 "This image could not be opened for markup." = "이 이미지를 마크업용으로 열 수 없습니다.";
 "Markup supports images up to 80 megapixels." = "마크업은 최대 8천만 화소의 이미지를 지원합니다.";
 "The marked image could not be rendered." = "마크업한 이미지를 렌더링할 수 없습니다.";
+
+/* Copy text from a screen area. */
+"Copy text from a screen area" = "화면 영역에서 텍스트 복사";
+"Drag over any part of the screen; the text in it goes to the clipboard." = "화면의 원하는 부분을 드래그하면 그 안의 텍스트가 클립보드에 복사됩니다.";
+"Text copied" = "텍스트를 복사했습니다";
+"No text found in the selected area" = "선택한 영역에서 텍스트를 찾을 수 없습니다";
+"Allow screen recording for this app to copy text from the screen" = "화면에서 텍스트를 복사하려면 이 앱에 화면 기록을 허용하세요";

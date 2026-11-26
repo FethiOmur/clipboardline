@@ -109,5 +109,21 @@ final class EdgeStackLayoutTests: XCTestCase {
         let cards = EdgeStackLayout.cards(from: items)
         XCTAssertEqual(cards.map(\.id), [items[0].id, items[2].id, items[3].id])
     }
+
+    func testOnlyTheVisibleCardsShowAtRest() {
+        for scale in [0.8, 1, 1.35] as [CGFloat] {
+            let height = EdgeStackLayout.panelSize(scale: scale).height
+            let shownTop = EdgeStackLayout.clipInset, shownBottom = height - EdgeStackLayout.clipInset
+            let count = EdgeStackLayout.visibleCount
+            // The visible cards are whole.
+            XCTAssertGreaterThanOrEqual(EdgeStackLayout.cardFrame(index: 0, image: nil, offset: 0, scale: scale).minY, shownTop)
+            XCTAssertLessThanOrEqual(EdgeStackLayout.cardFrame(index: count - 1, image: nil, offset: 0, scale: scale).maxY, shownBottom)
+            // The next card does not show at all.
+            XCTAssertGreaterThanOrEqual(EdgeStackLayout.cardFrame(index: count, image: nil, offset: 0, scale: scale).minY, shownBottom)
+            // Scrolled by one card, the card that left does not show either.
+            let step = EdgeStackLayout.pitch(scale: scale)
+            XCTAssertLessThanOrEqual(EdgeStackLayout.cardFrame(index: 0, image: nil, offset: step, scale: scale).maxY, shownTop)
+        }
+    }
 }
 #endif

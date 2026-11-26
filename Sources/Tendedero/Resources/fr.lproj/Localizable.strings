@@ -540,3 +540,10 @@
 "This image could not be opened for markup." = "Impossible d’ouvrir cette image pour la marquer.";
 "Markup supports images up to 80 megapixels." = "Le marquage prend en charge les images jusqu’à 80 mégapixels.";
 "The marked image could not be rendered." = "Impossible de générer l’image annotée.";
+
+/* Copy text from a screen area. */
+"Copy text from a screen area" = "Copier le texte d'une zone de l'écran";
+"Drag over any part of the screen; the text in it goes to the clipboard." = "Faites glisser sur n'importe quelle partie de l'écran ; le texte qu'elle contient est copié dans le presse-papiers.";
+"Text copied" = "Texte copié";
+"No text found in the selected area" = "Aucun texte trouvé dans la zone sélectionnée";
+"Allow screen recording for this app to copy text from the screen" = "Autorisez l'enregistrement de l'écran pour cette app afin de copier du texte depuis l'écran";

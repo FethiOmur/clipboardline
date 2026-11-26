@@ -85,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var copyHotKey: HotKey?
     private var libraryHotKey: HotKey?
     private var searchHotKey: HotKey?
+    private var regionTextHotKey: HotKey?
+    private let regionTextCapture = RegionTextCapture()
     private let directPaste: DirectPasteCoordinator
     private var pasteFocusHandoffDepth = 0
     private lazy var imageTextCopy: ImageTextCopy? = line.library.map { store in
@@ -139,7 +141,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         onTextPreview: { [weak self] in self?.showTextPreview($0) }, onLinkPreview: { [weak self] in self?.showLinkPreview($0) },
         onCopyAndClose: { [weak self] in self?.copyAndDismissShelf() })
     private var cancellables = Set<AnyCancellable>()
+    /// The menu-bar dwell tick; runs only tucked away with that setting on.
     private var mouseTimer: Timer?
+    /// Mouse-event monitors that check the pointer while the line is open.
+    private var pointerMonitors: [Any] = []
+    /// The one wake the open line needs next without a pointer event.
+    private var pointerCheck: Timer?
+    private var pointerTickQueued = false
     private var historyTimer: Timer?
     private var imageSearch: LibraryImageSearch?
 
@@ -173,8 +181,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// menu open it. This fork starts with it off; a saved choice wins.
     static var opensFromMenuBar: Bool {
         get { !(UserDefaults.standard.object(forKey: "menuBarRevealOff") as? Bool ?? true) }
-        set { UserDefaults.standard.set(!newValue, forKey: "menuBarRevealOff") }
+        set {
+            UserDefaults.standard.set(!newValue, forKey: "menuBarRevealOff")
+            // Tucked away, the pointer is only watched while this is on.
+            NotificationCenter.default.post(name: Self.menuBarRevealDidChange, object: nil)
+        }
     }
+    static let menuBarRevealDidChange = Notification.Name("menuBarRevealDidChange")
 
     /// Something new hanging shows itself for a moment. Off, it hangs
     /// quietly and waits for you to bring the line down.
@@ -250,6 +263,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let historyTimer = Timer(timeInterval: 3600, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.line.prune() }
         }
+        // Hourly housekeeping has no deadline; let the system batch the wake.
+        historyTimer.tolerance = 300
         RunLoop.main.add(historyTimer, forMode: .common)
         self.historyTimer = historyTimer
         panel.placeOnScreen()
@@ -269,6 +284,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         registerCopyShortcut(line.copyLatestShortcut, persist: false)
         registerLibraryShortcut(line.libraryShortcut, persist: false)
+        registerRegionTextShortcut(line.regionTextShortcut, persist: false)
+        setUpRegionTextCapture()
         if watchesFiles { registerSearchShortcut(line.globalSearchShortcut, persist: false) }
         setUpStatusItem()
         watchMenuBarClicks()
@@ -321,6 +338,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     }
                 }
             }
+        }
+
+        NotificationCenter.default.addObserver(forName: Self.menuBarRevealDidChange, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.syncPointerWatch() }
         }
 
         NotificationCenter.default.addObserver(
@@ -622,9 +643,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             dismiss()
         }
-        // The cursor is watched while there is a line, even tucked away,
-        // to notice it pushing against the top edge.
-        if wanted { startMouseTracking() } else { stopMouseTracking() }
+        syncPointerWatch()
     }
 
     private func present() {
@@ -650,6 +669,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if seconds > 0 { peekUntil = Date().addingTimeInterval(seconds) }
         awaySince = nil
         setRevealed(true)
+        // A longer peek on an open line moves the next check.
+        queuePointerTick()
     }
 
     private func setRevealed(_ on: Bool, restoreApplication: Bool = true) {
@@ -684,6 +705,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Install the hidden-to-open transform before exposing the window;
         // otherwise its first committed frame can flash fully open.
         if on, isPresent { panel.orderFrontRegardless() }
+        syncPointerWatch()
     }
 
     /// Checked as the shelf comes down and after a Space switch while it is
@@ -733,19 +755,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func startMouseTracking() {
+    /// Watches the pointer only while something can react to it; see
+    /// PointerWatch. Called whenever `wanted`, `isRevealed` or the menu-bar
+    /// setting changes.
+    private func syncPointerWatch() {
+        let need = PointerWatch.need(wanted: wanted, revealed: isRevealed, opensFromMenuBar: Self.opensFromMenuBar)
+        if need.pollsForMenuBarDwell { startDwellTimer() } else { stopDwellTimer() }
+        if need.followsPointer {
+            if pointerMonitors.isEmpty {
+                installPointerMonitors()
+                queuePointerTick()
+            }
+        } else {
+            for monitor in pointerMonitors { NSEvent.removeMonitor(monitor) }
+            pointerMonitors.removeAll()
+            schedulePointerCheck(after: nil)
+        }
+        if !wanted { panel.ignoresMouseEvents = true }
+    }
+
+    private func startDwellTimer() {
         guard mouseTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: PointerWatch.dwellInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)
         mouseTimer = timer
     }
 
-    private func stopMouseTracking() {
+    private func stopDwellTimer() {
         mouseTimer?.invalidate()
         mouseTimer = nil
-        panel.ignoresMouseEvents = true
+    }
+
+    /// Global monitors see the pointer over other apps (and over the stack's
+    /// pass-through gaps); local ones see it over the stack's cards. Mouse
+    /// events need no permission, unlike key events.
+    private func installPointerMonitors() {
+        let mask: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged,
+                                           .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .scrollWheel]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
+            MainActor.assumeIsolated { self?.queuePointerTick() }
+        }) { pointerMonitors.append(global) }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: mask.union([.mouseEntered, .mouseExited]), handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.queuePointerTick() }
+            return event
+        }) { pointerMonitors.append(local) }
+    }
+
+    /// Folds a burst of pointer events into one check.
+    private func queuePointerTick() {
+        guard isRevealed, !pointerTickQueued else { return }
+        pointerTickQueued = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + PointerWatch.eventCoalescing) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pointerTickQueued = false
+                if self.isRevealed { self.tick() }
+            }
+        }
+    }
+
+    private func schedulePointerCheck(after delay: TimeInterval?) {
+        pointerCheck?.invalidate()
+        pointerCheck = nil
+        guard let delay else { return }
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pointerCheck = nil
+                if self.isRevealed { self.tick() }
+            }
+        }
+        timer.tolerance = min(0.05, delay * 0.1)
+        RunLoop.main.add(timer, forMode: .common)
+        pointerCheck = timer
     }
 
     /// How long the cursor rests against the top edge before the line comes
@@ -830,8 +914,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let inside = NSMouseInRect(mouse, zone, false)
         if inside && pinned { pinned = false }
 
-        let busy = pinned || GrabView.isDragging || GrabView.isShowingMenu || line.pressedID != nil || now < peekUntil
+        // Every reason to stay open except `pinned` and the peek; those two
+        // end on a pointer visit and a known time, the rest end on their own.
+        let otherBusy = GrabView.isDragging || GrabView.isShowingMenu || line.pressedID != nil
             || (panel.isKeyWindow && !pointerFocus) || previewWindow != nil || pinFolderPicker != nil || tagPicker != nil || nameAndPinPicker != nil || commandPalette != nil || shortcutRecorder != nil || ToggleShortcutRecorder.shared.isRecording || operationBusy
+        let busy = pinned || now < peekUntil || otherBusy
+        defer {
+            if isRevealed {
+                schedulePointerCheck(after: PointerWatch.nextCheck(
+                    now: now, inside: inside, pinned: pinned, awaySince: awaySince, peekUntil: peekUntil,
+                    otherBusy: otherBusy, retractDelay: Self.retractDelay))
+            }
+        }
         if inside || busy {
             awaySince = nil
         } else {
@@ -890,7 +984,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
               Shortcut.current == nil || hotKey?.isRegistered == true,
               line.globalSearchShortcut == nil || searchHotKey?.isRegistered == true,
               line.libraryShortcut == nil || libraryHotKey?.isRegistered == true,
-              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true else { return }
+              line.copyLatestShortcut == nil || copyHotKey?.isRegistered == true,
+              line.regionTextShortcut == nil || regionTextHotKey?.isRegistered == true else { return }
         if line.notice == shortcutRestoreWarning { line.notice = nil }
         shortcutRestoreWarning = nil; settingsController?.model.shortcutWarning = nil
     }
@@ -1101,6 +1196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             model.changeToggleShortcut = { [weak self] in self?.changeShortcut() }
             model.setCopyShortcut = { [weak self] in self?.registerCopyShortcut($0) }
             model.recordCopyShortcut = { [weak self] in self?.recordShortcut() }
+            model.setRegionTextShortcut = { [weak self] in self?.registerRegionTextShortcut($0) }
+            model.recordRegionTextShortcut = { [weak self] in self?.recordRegionTextShortcut() }
             model.changeLogin = { Self.toggleLaunchAtLogin() }
             model.clearHistory = { [weak self] kind in self?.confirmClearHistory(kind: kind) }
             model.reopenForLanguage = { [weak self] in
@@ -1126,6 +1223,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func receiveCopiedText(_ text: String) { _ = line.texts.add(text) }
     func showLibrary() {
         guard let store = line.library, flushPreviewEdits() else { return }
+        // Catch up on images edited by other apps before they are searched.
+        imageSearch?.refresh()
         capturePasteTarget()
         if libraryController == nil {
             let controller = LibraryWindowController(store: store, line: line, copyPasteboard: isolatedCopyBoard)
@@ -2035,6 +2134,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         copyHotKey?.invalidate(); copyHotKey = replacement
         if persist { line.saveCopyLatestShortcut(value) }
+    }
+
+    /// Same pattern as the copy-latest shortcut: register the replacement before dropping the old key.
+    private func registerRegionTextShortcut(_ value: KeyShortcut?, persist: Bool = true) {
+        defer { clearResolvedShortcutWarning() }
+        guard let value else {
+            regionTextHotKey?.invalidate(); regionTextHotKey = nil
+            if persist { line.saveRegionTextShortcut(nil) }
+            return
+        }
+        guard value.isValidForRegionText else { return }
+        if regionTextHotKey?.isRegistered == true && value == line.regionTextShortcut { return }
+        let replacement = HotKey(keyCode: value.keyCode, modifiers: value.modifiers) { [weak self] in self?.regionTextCapture.start() }
+        guard replacement.isRegistered else {
+            line.notice = L("Shortcut unavailable; the previous shortcut is kept")
+            if persist {
+                let alert = NSAlert(); alert.messageText = L("Shortcut unavailable; the previous shortcut is kept")
+                alert.runModal()
+            }
+            return
+        }
+        regionTextHotKey?.invalidate(); regionTextHotKey = replacement
+        if persist { line.saveRegionTextShortcut(value) }
+        settingsController?.model.refresh()
+    }
+    private func recordRegionTextShortcut() {
+        shortcutRecorder?.window.close(); let recorder = ShortcutRecorder(); shortcutRecorder = recorder
+        recorder.onRestoreFailure = { [weak self] in self?.reportShortcutRestoreFailure() }
+        recorder.window.title = L("Copy text from a screen area")
+        recorder.onFinish = { [weak self] value in
+            self?.shortcutRecorder = nil
+            if let value { self?.registerRegionTextShortcut(value) }
+            self?.settingsController?.model.refresh()
+        }
+        recorder.show()
+    }
+    /// The text goes through the same writer as the app's other text copies, which marks the change as its own
+    /// (ClipboardWatcher.recordOwnCopy) so the clipboard watchers do not capture it again.
+    private func setUpRegionTextCapture() {
+        regionTextCapture.onText = { [weak self] text in
+            guard let self else { return }
+            guard ClipboardTransfer.write(ClipboardTransfer.textItems([text]), to: self.isolatedCopyBoard ?? .general) else {
+                self.line.notice = L("Could not copy selected items"); return
+            }
+            self.line.notice = L("Text copied")
+        }
+        regionTextCapture.onNoText = { [weak self] in
+            self?.line.notice = L("No text found in the selected area"); NSSound.beep()
+        }
+        regionTextCapture.onNeedsPermission = { [weak self] in
+            _ = CGRequestScreenCaptureAccess()
+            self?.line.notice = L("Allow screen recording for this app to copy text from the screen")
+        }
     }
 
     private func recordShortcut() {

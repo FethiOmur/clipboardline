@@ -872,6 +872,19 @@ final class Line: ObservableObject {
             defaults.set(data, forKey: "copyLatestShortcut")
         } else if value == nil { defaults.removeObject(forKey: "copyLatestShortcut") }
     }
+    /// Never saved means the default Option-Shift-X; an explicit "off" is stored as empty data so it stays off.
+    var regionTextShortcut: KeyShortcut? {
+        guard let data = defaults.data(forKey: "regionTextShortcut") else {
+            return KeyShortcut(keyCode: kVK_ANSI_X, modifiers: optionKey | shiftKey, keyLabel: "X")
+        }
+        guard !data.isEmpty, let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValidForRegionText else { return nil }
+        return value
+    }
+    func saveRegionTextShortcut(_ value: KeyShortcut?) {
+        if let value, value.isValidForRegionText, let data = try? JSONEncoder().encode(value) {
+            defaults.set(data, forKey: "regionTextShortcut")
+        } else if value == nil { defaults.set(Data(), forKey: "regionTextShortcut") }
+    }
     var libraryShortcut: KeyShortcut? {
         guard let data = defaults.data(forKey: "libraryShortcut"), let value = try? JSONDecoder().decode(KeyShortcut.self, from: data), value.isValid else { return nil }; return value
     }

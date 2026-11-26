@@ -308,6 +308,22 @@ final class ClipboardWatcherTests: ClipboardTestCase {
         for n in 0..<4 { png[29 + n] = UInt8(truncatingIfNeeded: crc >> (24 - 8 * n)) }
         return png
     }
+
+    /// The owner's choice: poll once a second, with slack the system can use
+    /// to fold the wake into others. Stopping leaves no timer behind.
+    @MainActor
+    func testPollsOnceASecondWithToleranceAndStopsCleanly() throws {
+        try withWatcher { watcher, _, _, _ in
+            XCTAssertNil(watcher.pollTimer)
+            watcher.start()
+            let timer = try XCTUnwrap(watcher.pollTimer)
+            XCTAssertEqual(timer.timeInterval, 1)
+            XCTAssertTrue(timer.tolerance >= 0.1, "tolerance \(timer.tolerance)")
+            watcher.stop()
+            XCTAssertNil(watcher.pollTimer)
+            XCTAssertFalse(timer.isValid)
+        }
+    }
 }
 
 @MainActor

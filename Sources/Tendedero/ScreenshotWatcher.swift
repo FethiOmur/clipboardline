@@ -125,10 +125,34 @@ final class ScreenshotWatcher {
         }
         let src = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd, eventMask: [.write, .attrib, .rename, .delete], queue: .main)
-        src.setEventHandler { [weak self] in self?.scheduleFolderCheck() }
+        src.setEventHandler { [weak self, weak src] in
+            guard let self else { return }
+            // The parent itself moved or went away: watch whatever is at its
+            // path now, so later replacements are still seen at once.
+            if let src, !src.data.isDisjoint(with: [.rename, .delete]) { self.rewatchParent() }
+            self.scheduleFolderCheck()
+        }
         src.setCancelHandler { close(fd) }
         src.resume()
         parentSource = src
+        armIdentityMonitor()
+    }
+
+    private func rewatchParent() {
+        parentSource?.cancel()
+        parentSource = nil
+        armIdentityMonitor()
+        let parent = folder.deletingLastPathComponent()
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let fd = open(parent.path, O_EVTONLY)
+            DispatchQueue.main.async {
+                guard let self, self.parentSource == nil else {
+                    if fd >= 0 { close(fd) }
+                    return
+                }
+                self.watchParent(fd)
+            }
+        }
     }
 
     /// Starts the child watcher before listing so a capture that lands in
@@ -183,13 +207,33 @@ final class ScreenshotWatcher {
         }
     }
 
+    /// How often the folder's identity is re-read as a safety net. With the
+    /// parent watched, its events report a replaced folder at once, so the
+    /// poll only covers what they cannot (a change several levels up) and
+    /// runs rarely; without a parent watch it is the only way to notice.
+    static let identityPollWithParentWatch: TimeInterval = 60
+    static let identityPollWithoutParentWatch: TimeInterval = 1
+    var identityPollInterval: TimeInterval {
+        parentSource == nil ? Self.identityPollWithoutParentWatch : Self.identityPollWithParentWatch
+    }
+    private var armedIdentityInterval: TimeInterval?
+
     private func startIdentityMonitor() {
-        guard identityTimer == nil else { return }
+        guard identityTimer == nil, !stopped else { return }
         let timer = DispatchSource.makeTimerSource(queue: .main)
-        timer.schedule(deadline: .now() + .seconds(1), repeating: .seconds(1), leeway: .milliseconds(100))
         timer.setEventHandler { [weak self] in self?.readFolderIdentity() }
-        timer.resume()
         identityTimer = timer
+        armIdentityMonitor()
+        timer.resume()
+    }
+
+    private func armIdentityMonitor() {
+        guard let identityTimer else { return }
+        let interval = identityPollInterval
+        guard interval != armedIdentityInterval else { return }
+        armedIdentityInterval = interval
+        let ms = Int(interval * 1000)
+        identityTimer.schedule(deadline: .now() + .milliseconds(ms), repeating: .milliseconds(ms), leeway: .milliseconds(ms / 10))
     }
 
     private func scheduleFolderCheck() {
@@ -248,6 +292,7 @@ final class ScreenshotWatcher {
         pendingFolderCheck = nil
         identityTimer?.cancel()
         identityTimer = nil
+        armedIdentityInterval = nil
         generation += 1
         source?.cancel()
         source = nil

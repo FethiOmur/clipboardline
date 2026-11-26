@@ -36,6 +36,10 @@ struct EdgeStackView: View {
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            // Exactly `visibleCount` cards show. The panel is a little taller
+            // than that for shadows, and without this the next card's edge
+            // would peek into that margin.
+            .mask(Rectangle().padding(.vertical, EdgeStackLayout.clipInset))
             // One short spring when cards are added or removed, then still.
             .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86),
                        value: cards.map(\.id))

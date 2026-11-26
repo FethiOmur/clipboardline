@@ -540,3 +540,10 @@
 "This image could not be opened for markup." = "无法打开此图像进行标记。";
 "Markup supports images up to 80 megapixels." = "标记功能支持最高 8000 万像素的图像。";
 "The marked image could not be rendered." = "无法渲染已标记的图像。";
+
+/* Copy text from a screen area. */
+"Copy text from a screen area" = "复制屏幕区域中的文字";
+"Drag over any part of the screen; the text in it goes to the clipboard." = "在屏幕的任意区域拖动选择，其中的文字会复制到剪贴板。";
+"Text copied" = "文字已复制";
+"No text found in the selected area" = "所选区域中未找到文字";
+"Allow screen recording for this app to copy text from the screen" = "请允许此应用录制屏幕，以便复制屏幕上的文字";

@@ -62,6 +62,30 @@ final class MenuBarRevealDefaultTests: XCTestCase {
         XCTAssertFalse(AppDelegate.opensFromMenuBar)
     }
 
+    @MainActor
+    func testHangingCopiedImagesStartsOnAndKeepsASavedChoice() {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "clipboardEnabled")
+        defer { if let saved { defaults.set(saved, forKey: "clipboardEnabled") } else { defaults.removeObject(forKey: "clipboardEnabled") } }
+
+        defaults.removeObject(forKey: "clipboardEnabled")
+        XCTAssertTrue(ClipboardWatcher.isEnabled)
+        ClipboardWatcher.isEnabled = false
+        XCTAssertFalse(ClipboardWatcher.isEnabled)
+    }
+
+    @MainActor
+    func testImagesAreNotReadForSearchUnlessSwitchedOn() {
+        let defaults = UserDefaults.standard
+        let saved = defaults.object(forKey: "imageSearchIndexing")
+        defer { if let saved { defaults.set(saved, forKey: "imageSearchIndexing") } else { defaults.removeObject(forKey: "imageSearchIndexing") } }
+
+        defaults.removeObject(forKey: "imageSearchIndexing")
+        XCTAssertFalse(LibraryImageSearch.isEnabled)
+        LibraryImageSearch.isEnabled = true
+        XCTAssertTrue(LibraryImageSearch.isEnabled)
+    }
+
     func testShowingOverFullScreenStartsOnAndKeepsASavedChoice() {
         let defaults = UserDefaults.standard
         let saved = defaults.object(forKey: "showOverFullScreen")
