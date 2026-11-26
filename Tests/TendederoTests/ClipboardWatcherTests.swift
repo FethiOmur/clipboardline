@@ -52,7 +52,8 @@ final class ClipboardWatcherTests: ClipboardTestCase {
         try withWatcher { watcher, source, _, received in
             watcher.start()
             let png = try imageData(.png)
-            source.copy([.png: png, .string: Data("unread text".utf8)])
+            // Chrome's Copy Image: PNG with an img tag as HTML, which stays unread.
+            source.copy([.png: png, .html: Data("<img src=\"https://example.invalid/a.png\">".utf8)])
             let before = source.items
             let count = source.changeCount
             watcher.check()
@@ -96,6 +97,59 @@ final class ClipboardWatcherTests: ClipboardTestCase {
             XCTAssertEqual(received().count, 1)
             XCTAssertEqual(source.dataReads, [.png])
         }
+    }
+
+    /// Office, Keynote, Pages and other rich-text apps offer a picture of
+    /// copied text. Such a copy is text: nothing is read, saved or hung.
+    @MainActor
+    func testTextCopyWithAnImageRenderingIsIgnoredWithoutReadingIt() throws {
+        let pdf = NSPasteboard.PasteboardType("com.adobe.pdf")
+        let shapes: [[NSPasteboard.PasteboardType: Data]] = [
+            [.string: Data("synthetic".utf8), .rtf: Data("{\\rtf1}".utf8), .html: Data("<p>synthetic</p>".utf8), pdf: Data([1]), .png: try imageData(.png), .tiff: try imageData(.tiff)],
+            [.rtfd: Data([1]), .string: Data("synthetic".utf8), .tiff: try imageData(.tiff)],
+            [.string: Data("synthetic".utf8), .png: try imageData(.png)]
+        ]
+        for (index, shape) in shapes.enumerated() {
+            try withWatcher { watcher, source, folder, received in
+                watcher.start()
+                source.copy(shape)
+                watcher.check()
+                XCTAssertTrue(received().isEmpty, "shape \(index)")
+                XCTAssertTrue(source.dataReads.isEmpty, "shape \(index)")
+                XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path), "shape \(index)")
+            }
+        }
+    }
+
+    /// Real image copies still hang, including a browser's Copy Image that
+    /// carries the image's URL, text or HTML alongside.
+    @MainActor
+    func testImageCopiesWithURLOrHTMLAlongsideAreStillCaptured() throws {
+        let urlName = NSPasteboard.PasteboardType("public.url-name")
+        let shapes: [[NSPasteboard.PasteboardType: Data]] = [
+            [.png: try imageData(.png)],
+            [.png: try imageData(.png), .html: Data("<img>".utf8)],
+            [.tiff: try imageData(.tiff), .URL: Data("https://example.invalid/a.png".utf8), urlName: Data("a".utf8), .string: Data("https://example.invalid/a.png".utf8), .rtfd: Data([1])],
+            [.string: Data("https://example.invalid/a.png".utf8), .html: Data("<img>".utf8), .png: try imageData(.png)]
+        ]
+        for (index, shape) in shapes.enumerated() {
+            try withWatcher { watcher, source, _, received in
+                watcher.start()
+                source.copy(shape)
+                watcher.check()
+                XCTAssertEqual(received().count, 1, "shape \(index)")
+            }
+        }
+    }
+
+    @MainActor
+    func testTextCopyRuleUsesTypeNamesAcrossItems() {
+        XCTAssertFalse(ClipboardWatcher.isTextCopy([[.png]]))
+        XCTAssertTrue(ClipboardWatcher.isTextCopy([[.png], [.rtf, .string]]))
+        XCTAssertTrue(ClipboardWatcher.isTextCopy([[.tiff, NSPasteboard.PasteboardType("NeXT Rich Text Format v1.0 pasteboard type")]]))
+        XCTAssertFalse(ClipboardWatcher.isTextCopy([[.tiff, .string], [NSPasteboard.PasteboardType("Apple URL pasteboard type")]]))
+        XCTAssertFalse(ClipboardWatcher.isTextCopy([[.png, .html]]))
+        XCTAssertTrue(ClipboardWatcher.isTextCopy([[.png, .html, .rtf, .string]]))
     }
 
     @MainActor

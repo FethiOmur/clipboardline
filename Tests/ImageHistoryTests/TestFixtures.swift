@@ -26,6 +26,9 @@ final class SyntheticFixture {
         folder = (folderRoot ?? FileManager.default.temporaryDirectory).appendingPathComponent(suite)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         defaults.set(true, forKey: "soundOff")
+        // Shelf tests hang more than the default ten unsaved copies; the cap
+        // has its own tests (HistoryKeepCountTests), which clear this key.
+        defaults.set(10_000, forKey: HistoryRetention.keepCountKey)
     }
     func cleanup() {
         defaults.removePersistentDomain(forName: suite)

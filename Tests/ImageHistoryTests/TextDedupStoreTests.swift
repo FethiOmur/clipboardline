@@ -122,13 +122,13 @@ import XCTest
         let old = try XCTUnwrap(store(f).captureText("Copied two days ago"))
         f.date.addTimeInterval(2 * 86400)
         let relaunched = try store(f)
-        XCTAssertNotNil(try relaunched.item(old.id)?.deletedAt)
+        XCTAssertNil(try relaunched.item(old.id), "expired copies are deleted")
         XCTAssertTrue(try live(relaunched).isEmpty)
 
         let kept = try XCTUnwrap(relaunched.captureText("Copied today"))
         f.date.addTimeInterval(2 * 86400)
         let next = try XCTUnwrap(relaunched.captureText("Copied after two more days"))
-        XCTAssertNotNil(try relaunched.item(kept.id)?.deletedAt)
+        XCTAssertNil(try relaunched.item(kept.id))
         XCTAssertEqual(try live(relaunched).map(\.id), [next.id])
     }
 
@@ -518,11 +518,11 @@ import XCTest
         let recaptured = try XCTUnwrap(library.captureText("Renewed temporary value"))
         XCTAssertEqual(recaptured.id, original.id)
         try library.prune()
-        XCTAssertNil(try library.item(original.id)?.deletedAt)
-        XCTAssertNotNil(try library.item(stale.id)?.deletedAt)
+        XCTAssertNil(try XCTUnwrap(library.item(original.id)).deletedAt)
+        XCTAssertNil(try library.item(stale.id))
         f.date.addTimeInterval(31 * 86400)
         try library.prune()
-        XCTAssertNotNil(try library.item(original.id)?.deletedAt)
+        XCTAssertNil(try library.item(original.id))
     }
 
     func testBackwardClockUsesActualCaptureForExpiryWhilePinnedItemsRemain() throws {
@@ -548,8 +548,8 @@ import XCTest
         XCTAssertTrue(fresh.createdAt > f.date)
         f.date.addTimeInterval(29 * 86400)
         try library.prune()
-        XCTAssertNil(try library.item(original.id)?.deletedAt)
-        XCTAssertNil(try library.item(fresh.id)?.deletedAt)
+        XCTAssertNil(try XCTUnwrap(library.item(original.id)).deletedAt)
+        XCTAssertNil(try XCTUnwrap(library.item(fresh.id)).deletedAt)
         f.date.addTimeInterval(2 * 86400)
         // Shelf ordering dates are still far in the future, but expiry must
         // use the real most recent capture date rather than that sort key.
@@ -557,10 +557,10 @@ import XCTest
         XCTAssertTrue(fresh.createdAt > f.date)
         let reopened = try store(f)
         try reopened.prune()
-        XCTAssertNotNil(try reopened.item(original.id)?.deletedAt)
-        XCTAssertNotNil(try reopened.item(fresh.id)?.deletedAt)
-        XCTAssertNil(try reopened.item(pinned.id)?.deletedAt)
-        XCTAssertNil(try reopened.item(future.id)?.deletedAt)
+        XCTAssertNil(try reopened.item(original.id))
+        XCTAssertNil(try reopened.item(fresh.id))
+        XCTAssertNil(try XCTUnwrap(reopened.item(pinned.id)).deletedAt)
+        XCTAssertNil(try XCTUnwrap(reopened.item(future.id)).deletedAt)
         XCTAssertEqual(Set(try live(reopened).map(\.id)), Set([pinned.id, future.id]))
     }
 

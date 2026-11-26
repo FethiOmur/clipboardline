@@ -203,7 +203,7 @@
 "Unorganized" = "Unorganized";
 "Unpin" = "ピン留めを解除";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
-"Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Unsaved copies expire to recoverable Trash. Saved items and original files are kept.";
+"Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept." = "期限切れの未保存コピーは完全に削除されます。取り除いた項目は1日間ゴミ箱に残ります。保存した項目と元のファイルは保持されます。";
 "Untitled note" = "Untitled note";
 "Use Control or Command with a key" = "Use Control or Command with a key";
 "Use ⌃⌥L" = "Use ⌃⌥L";
@@ -547,3 +547,5 @@
 "Text copied" = "テキストをコピーしました";
 "No text found in the selected area" = "選択した領域にテキストが見つかりません";
 "Allow screen recording for this app to copy text from the screen" = "画面からテキストをコピーするには、このアプリに画面収録を許可してください";
+"Keep newest unsaved" = "保存していない最新の項目を保持";
+"%d of each type" = "種類ごとに %d 件";

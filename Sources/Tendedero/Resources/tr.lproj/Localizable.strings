@@ -203,7 +203,7 @@
 "Unorganized" = "Düzenlenmemiş";
 "Unpin" = "Sabitlemeyi kaldır";
 "Unsaved copies are kept for %d days" = "Kaydedilmemiş kopyalar %d gün saklanır";
-"Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Kaydedilmemiş kopyalar süresi dolunca geri alınabilir Çöp’e gider. Kalıcı içerikler ve orijinal dosyalar korunur.";
+"Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept." = "Süresi dolan kaydedilmemiş kopyalar kalıcı olarak silinir. Kaldırdığınız öğeler bir gün Çöp’te kalır. Kalıcı içerikler ve orijinal dosyalar korunur.";
 "Untitled note" = "Başlıksız not";
 "Use Control or Command with a key" = "Bir tuşla Control veya Command kullanın";
 "Use ⌃⌥L" = "⌃⌥L kullan";
@@ -547,3 +547,5 @@
 "Text copied" = "Metin kopyalandı";
 "No text found in the selected area" = "Seçilen alanda metin bulunamadı";
 "Allow screen recording for this app to copy text from the screen" = "Ekrandan metin kopyalamak için bu uygulamaya ekran kaydı izni verin";
+"Keep newest unsaved" = "Kaydedilmemişlerden en yenileri tut";
+"%d of each type" = "Her türden %d";

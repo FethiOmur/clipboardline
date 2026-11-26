@@ -196,6 +196,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         set { UserDefaults.standard.set(!newValue, forKey: "quietHang") }
     }
 
+    /// Moving the pointer to the screen's right edge hides the open stack.
+    /// On unless switched off with the `edgeCloses` default.
+    static var edgeCloses: Bool {
+        UserDefaults.standard.object(forKey: "edgeCloses") as? Bool ?? true
+    }
+    /// Whether the pointer was at the right edge at the last check, or when
+    /// the stack opened; only an arrival there closes it.
+    private var edgeArrival = PointerWatch.EdgeArrival()
+    private func pointerIsAtClosingEdge(_ mouse: NSPoint) -> Bool {
+        guard let screen = panel.screen else { return false }
+        return PointerWatch.isAtClosingEdge(mouse, screen: screen.frame)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         EditingMenu.install(onSettings: { [weak self] in self?.showSettings() })
         if startupError != nil { setUpStatusItem(); DispatchQueue.main.async { [weak self] in self?.showStartupFailure() }; return }
@@ -696,7 +709,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             previousApplication = nil
         }
-        if on { keepPanelOnActiveSpace() }
+        if on { keepPanelOnActiveSpace(); edgeArrival.opened(atEdge: pointerIsAtClosingEdge(NSEvent.mouseLocation)) }
         panel.setShelfRevealed(on) { [weak self] in
             guard let self, on == self.isRevealed else { return }
             if on { self.updateMousePassThrough(NSEvent.mouseLocation) }
@@ -916,8 +929,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Every reason to stay open except `pinned` and the peek; those two
         // end on a pointer visit and a known time, the rest end on their own.
-        let otherBusy = GrabView.isDragging || GrabView.isShowingMenu || line.pressedID != nil
-            || (panel.isKeyWindow && !pointerFocus) || previewWindow != nil || pinFolderPicker != nil || tagPicker != nil || nameAndPinPicker != nil || commandPalette != nil || shortcutRecorder != nil || ToggleShortcutRecorder.shared.isRecording || operationBusy
+        let activity = GrabView.isDragging || GrabView.isShowingMenu || line.pressedID != nil
+            || previewWindow != nil || pinFolderPicker != nil || tagPicker != nil || nameAndPinPicker != nil || commandPalette != nil || shortcutRecorder != nil || ToggleShortcutRecorder.shared.isRecording || operationBusy
+        let otherBusy = activity || (panel.isKeyWindow && !pointerFocus)
+
+        // Arriving at the right edge hides the stack at once, pinned or
+        // peeking. Keyboard focus alone does not block it: the stack toggled
+        // open takes focus, and closing that one is the point.
+        if edgeArrival.check(atEdge: pointerIsAtClosingEdge(mouse), blocked: activity, enabled: presentsEdgeStack && Self.edgeCloses) {
+            awaySince = nil
+            setRevealed(false)
+            return
+        }
         let busy = pinned || now < peekUntil || otherBusy
         defer {
             if isRevealed {

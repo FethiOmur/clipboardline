@@ -47,4 +47,36 @@ enum PointerWatch {
         if otherBusy { waits.append(busyInterval) }
         return waits.min().map { max(0, $0) }
     }
+
+    // MARK: Closing at the right edge
+
+    /// The last points of the screen, beyond the stack's ~10 pt inset.
+    static let closingEdgeWidth: CGFloat = 2
+
+    /// Whether the pointer is in the screen's last `closingEdgeWidth` points
+    /// on the right.
+    static func isAtClosingEdge(_ point: CGPoint, screen: CGRect) -> Bool {
+        point.x >= screen.maxX - closingEdgeWidth && point.x <= screen.maxX
+            && point.y >= screen.minY && point.y <= screen.maxY
+    }
+
+    /// The open stack hides when the pointer arrives at the right edge: it
+    /// was not there at the previous check (or when the stack opened), so a
+    /// pointer already resting there does not close it. A drag, menu, press,
+    /// preview or picker keeps it open.
+    static func closesAtEdge(enabled: Bool, wasAtEdge: Bool, atEdge: Bool, blocked: Bool) -> Bool {
+        enabled && atEdge && !wasAtEdge && !blocked
+    }
+
+    /// Remembers where the pointer was at the last check of the open stack.
+    struct EdgeArrival {
+        private(set) var wasAtEdge = false
+        /// The stack opened with the pointer here; resting at the edge then is not an arrival.
+        mutating func opened(atEdge: Bool) { wasAtEdge = atEdge }
+        /// One pointer check; true when the stack must hide now.
+        mutating func check(atEdge: Bool, blocked: Bool, enabled: Bool) -> Bool {
+            defer { wasAtEdge = atEdge }
+            return PointerWatch.closesAtEdge(enabled: enabled, wasAtEdge: wasAtEdge, atEdge: atEdge, blocked: blocked)
+        }
+    }
 }

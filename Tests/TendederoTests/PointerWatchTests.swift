@@ -73,4 +73,51 @@ final class PointerWatchTests: XCTestCase {
     func testRecheckIsFarSlowerThanTheOldThirtyHertzTick() {
         XCTAssertGreaterThanOrEqual(PointerWatch.busyInterval, 0.2)
     }
+
+    // MARK: Closing at the right edge
+
+    private let screen = CGRect(x: 0, y: 0, width: 1512, height: 982)
+
+    func testOnlyTheScreensLastTwoPointsOnTheRightCountAsTheEdge() {
+        XCTAssertTrue(PointerWatch.isAtClosingEdge(CGPoint(x: 1511, y: 500), screen: screen))
+        XCTAssertTrue(PointerWatch.isAtClosingEdge(CGPoint(x: 1510.5, y: 0), screen: screen))
+        // The stack's cards sit about 10 pt in from the edge.
+        XCTAssertFalse(PointerWatch.isAtClosingEdge(CGPoint(x: 1502, y: 500), screen: screen))
+        XCTAssertFalse(PointerWatch.isAtClosingEdge(CGPoint(x: 1509, y: 500), screen: screen))
+        // Another screen to the right or below is not this one's edge.
+        XCTAssertFalse(PointerWatch.isAtClosingEdge(CGPoint(x: 1600, y: 500), screen: screen))
+        XCTAssertFalse(PointerWatch.isAtClosingEdge(CGPoint(x: 1511, y: -40), screen: screen))
+        let right = CGRect(x: 1512, y: 0, width: 1920, height: 1080)
+        XCTAssertTrue(PointerWatch.isAtClosingEdge(CGPoint(x: 3431, y: 700), screen: right))
+        XCTAssertFalse(PointerWatch.isAtClosingEdge(CGPoint(x: 1511, y: 700), screen: right))
+    }
+
+    func testArrivingAtTheEdgeClosesOnce() {
+        var edge = PointerWatch.EdgeArrival()
+        edge.opened(atEdge: false)
+        XCTAssertFalse(edge.check(atEdge: false, blocked: false, enabled: true))
+        XCTAssertTrue(edge.check(atEdge: true, blocked: false, enabled: true))
+        XCTAssertFalse(edge.check(atEdge: true, blocked: false, enabled: true), "resting there is not a new arrival")
+    }
+
+    func testAPointerAlreadyAtTheEdgeWhenTheStackOpensDoesNotCloseIt() {
+        var edge = PointerWatch.EdgeArrival()
+        edge.opened(atEdge: true)
+        XCTAssertFalse(edge.check(atEdge: true, blocked: false, enabled: true))
+        XCTAssertFalse(edge.check(atEdge: true, blocked: false, enabled: true))
+        // Leaving and coming back is an arrival.
+        XCTAssertFalse(edge.check(atEdge: false, blocked: false, enabled: true))
+        XCTAssertTrue(edge.check(atEdge: true, blocked: false, enabled: true))
+    }
+
+    func testADragMenuPressPreviewOrPickerKeepsItOpenAndSwitchingOffDisablesIt() {
+        var edge = PointerWatch.EdgeArrival()
+        edge.opened(atEdge: false)
+        XCTAssertFalse(edge.check(atEdge: true, blocked: true, enabled: true))
+        // The arrival happened while busy; staying there afterwards does not close it.
+        XCTAssertFalse(edge.check(atEdge: true, blocked: false, enabled: true))
+        var off = PointerWatch.EdgeArrival()
+        off.opened(atEdge: false)
+        XCTAssertFalse(off.check(atEdge: true, blocked: false, enabled: false))
+    }
 }

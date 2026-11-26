@@ -842,6 +842,13 @@ final class Line: ObservableObject {
         if let library { do { try library.prune() } catch { notice = error.localizedDescription } }
         else { texts.prune() }
     }
+    var keepCount: Int { HistoryRetention.keepCount(defaults: defaults) }
+    /// How many unsaved copies of each kind stay; a smaller choice applies at once.
+    func setKeepCount(_ count: Int) {
+        guard HistoryRetention.keepCountChoices.contains(count) else { return }
+        objectWillChange.send(); defaults.set(count, forKey: HistoryRetention.keepCountKey)
+        if let library { do { try library.prune() } catch { notice = error.localizedDescription } }
+    }
 
 
     var newestID: UUID? { items.first(where: { !$0.falling })?.id }

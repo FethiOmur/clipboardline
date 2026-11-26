@@ -305,6 +305,9 @@ private struct SettingsView: View {
     private var history: some View {
         let cleanupCount = try? line.library?.unsavedHistoryCount(kind: model.historyCleanupKind)
         return Section {
+            Picker(L("Keep newest unsaved"), selection: model.binding(get: { line.keepCount }, set: { line.setKeepCount($0) })) {
+                ForEach(HistoryRetention.keepCountChoices, id: \.self) { Text(String(format: L("%d of each type"), $0)).tag($0) }
+            }
             ForEach(LibraryKind.allCases, id: \.self) { kind in
                 Picker(kind == .image ? L("Images") : kind == .text ? L("Texts") : L("Links"), selection: model.binding(get: { line.retentionDays(for: kind) }, set: { line.setRetentionDays($0, for: kind) })) {
                     ForEach(ImageHistory.dayChoices, id: \.self) { Text(String(format: L("Keep for %d days"), $0)).tag($0) }
@@ -322,7 +325,7 @@ private struct SettingsView: View {
             Button(L("Clear unsaved copies…")) { model.clearHistory(model.historyCleanupKind) }
                 .disabled(line.library == nil || cleanupCount == 0)
         } header: { Text(L("History")) } footer: {
-            Text(L("Unsaved copies expire to recoverable Trash. Saved items and original files are kept."))
+            Text(L("Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept."))
         }
     }
 

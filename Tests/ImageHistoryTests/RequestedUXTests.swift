@@ -332,15 +332,15 @@ import XCTest
         f.date.addTimeInterval(4 * 86400)
         let line = Line(defaults: f.defaults, inbox: f.inbox, now: { f.date }, breeze: false, library: store)
         line.setRetentionDays(3, for: .text)
-        XCTAssertTrue(try store.item(text.id)?.deletedAt != nil)
-        XCTAssertNil(try store.item(image.id)?.deletedAt); XCTAssertNil(try store.item(link.id)?.deletedAt); XCTAssertNil(try store.item(saved.id)?.deletedAt)
+        XCTAssertNil(try store.item(text.id))
+        XCTAssertNil(try XCTUnwrap(store.item(image.id)).deletedAt); XCTAssertNil(try XCTUnwrap(store.item(link.id)).deletedAt); XCTAssertNil(try XCTUnwrap(store.item(saved.id)).deletedAt)
         line.setRetentionDays(1, for: .image)
         XCTAssertEqual(line.retentionDays(for: .text), 3); XCTAssertEqual(line.retentionDays(for: .link), 30)
-        XCTAssertTrue(try store.item(image.id)?.deletedAt != nil); XCTAssertNil(try store.item(link.id)?.deletedAt)
-        line.setRetentionDays(3, for: .link); XCTAssertTrue(try store.item(link.id)?.deletedAt != nil)
+        XCTAssertNil(try store.item(image.id)); XCTAssertNil(try XCTUnwrap(store.item(link.id)).deletedAt)
+        line.setRetentionDays(3, for: .link); XCTAssertNil(try store.item(link.id))
         let reopened = try LibraryStore(defaults: f.defaults, inbox: f.inbox, now: { f.date })
         XCTAssertEqual(reopened.retentionDays(for: .image), 1); XCTAssertEqual(reopened.retentionDays(for: .text), 3); XCTAssertEqual(reopened.retentionDays(for: .link), 3)
-        XCTAssertNil(try reopened.item(saved.id)?.deletedAt); XCTAssertTrue(try reopened.item(saved.id)?.favorite == true)
+        XCTAssertNil(try XCTUnwrap(reopened.item(saved.id)).deletedAt); XCTAssertTrue(try reopened.item(saved.id)?.favorite == true)
     }
     func testFinishingTextEditSavesBeforeBrowsingAndFailedSaveKeepsEditableDraft() throws {
         _ = NSApplication.shared

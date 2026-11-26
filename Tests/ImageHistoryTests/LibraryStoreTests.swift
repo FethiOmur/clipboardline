@@ -53,7 +53,7 @@ import XCTest
         try library.unassign(first.id, from: folder); let tag = try XCTUnwrap(library.tags().first); try library.removeTag(tag.id, from: second.id); try library.toggleFavorite([third.id])
         f.date = f.date.addingTimeInterval(90 * 86400); try library.prune()
         XCTAssertEqual(Set(try library.query(LibraryQuery()).map(\.id)), Set([first.id,second.id,third.id]))
-        XCTAssertTrue(try library.item(temporary.id)?.deletedAt != nil)
+        XCTAssertNil(try library.item(temporary.id), "an expired copy is deleted")
         XCTAssertEqual(try library.query(LibraryQuery(scope: .unorganized)).count, 3)
     }
     func testAllPinnedNeedsEveryIdPinnedAndExisting() throws {
@@ -249,15 +249,18 @@ import XCTest
         f.date.addTimeInterval(31 * 86400); let recaptured = try library.captureLink(first.linkURL!)
         XCTAssertEqual(recaptured.id, first.id); XCTAssertEqual(recaptured.createdAt, first.createdAt)
         XCTAssertEqual(try library.shelfItems(.link).first?.id, first.id)
-        try library.prune(); XCTAssertNil(try library.item(first.id)?.deletedAt); XCTAssertTrue(try library.item(second.id)?.deletedAt != nil)
-        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(first.id)?.deletedAt != nil)
+        try library.prune(); XCTAssertNil(try XCTUnwrap(library.item(first.id)).deletedAt); XCTAssertNil(try library.item(second.id))
+        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertNil(try library.item(first.id))
     }
     func testRestoredItemGetsAFullRetentionPeriodBeforeItExpiresAgain() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)
         let item = try library.captureLink(URL(string: "https://example.com/old")!)
-        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
-        try library.restore([item.id]); try library.prune(); XCTAssertNil(try library.item(item.id)?.deletedAt)
-        f.date.addTimeInterval(31 * 86400); try library.prune(); XCTAssertTrue(try library.item(item.id)?.deletedAt != nil)
+        // Expired copies are deleted, so only a hand-removed item can come back.
+        f.date.addTimeInterval(20 * 86400); try library.trash([item.id]); try library.prune()
+        XCTAssertNotNil(try XCTUnwrap(library.item(item.id)).deletedAt)
+        try library.restore([item.id]); f.date.addTimeInterval(15 * 86400); try library.prune()
+        XCTAssertNil(try XCTUnwrap(library.item(item.id)).deletedAt, "35 days old, but restored 15 days ago")
+        f.date.addTimeInterval(16 * 86400); try library.prune(); XCTAssertNil(try library.item(item.id))
     }
     func testUndoTakeDownDoesNotHangATextOrLinkTwiceAfterItWasCopiedAgain() throws {
         let f = try SyntheticFixture(); defer { f.cleanup() }; let library = try store(f)

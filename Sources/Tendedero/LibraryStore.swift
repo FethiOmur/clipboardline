@@ -978,19 +978,108 @@ extension String {
     }
     func restore(_ ids: [UUID]) throws { try mutate(ids, owning: false) { $0.deletedAt = nil; $0.onShelf = true; $0.trashRevision = nil; $0.lastCapturedAt = self.now() }; invalidateShelfUndo(ids) }
     func markCopied(_ ids: [UUID]) throws { try mutate(ids) { $0.lastCopiedAt = self.now(); $0.captureRevision = UUID() } }
+    /// How long a hand-removed item stays restorable in the Library Trash
+    /// before the next prune deletes it for good.
+    static let trashPurgeDelay: TimeInterval = 24 * 60 * 60
+    /// Live copies that are never purged: pinned, saved, tagged or foldered.
+    private static let unretainedLiveWhere = "deleted IS NULL AND retained IS NULL AND favorite=0 AND NOT EXISTS(SELECT 1 FROM item_collections c WHERE c.item=items.id) AND NOT EXISTS(SELECT 1 FROM item_tags t WHERE t.item=items.id)"
+    /// Expired unsaved copies and Trash older than `trashPurgeDelay` are
+    /// deleted permanently: rows, derived index rows and the app's own files.
+    /// With nothing to purge this costs the indexed reads in `purgeCandidates`.
     func prune() throws {
-        var expired = [LibraryRecord]()
+        guard try !purgeCandidates().isEmpty else { return }
+        var purged = [LibraryRecord](), referenced = Set<String>()
+        try db.transaction {
+            // Re-read under the writer lock; another app instance may have
+            // pinned, restored or recaptured a candidate since the first read.
+            purged = try purgeCandidates()
+            guard !purged.isEmpty else { return }
+            referenced = try purgeRows(purged.map(\.id))
+        }
+        guard !purged.isEmpty else { return }
+        removeOwnedFiles(of: purged, referenced: referenced)
+        let ids = purged.map(\.id)
+        invalidateShelfUndo(ids); invalidateTrashUndo(ids)
+        changed(ids, kinds: Set(purged.map(\.kind)))
+    }
+    private func purgeCandidates() throws -> [LibraryRecord] {
+        var candidates = [LibraryRecord]()
+        let keep = Int64(HistoryRetention.keepCount(defaults: defaults)), date = now()
         for kind in LibraryKind.allCases {
-            let cutoff = now().addingTimeInterval(-Double(retentionDays(for: kind)) * 86400)
+            // Beyond the newest `keep` unsaved copies, in shelf order. Pinned,
+            // tagged or foldered items are retained and never counted.
+            candidates += try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE kind=? AND \(Self.unretainedLiveWhere) ORDER BY created DESC,rowid DESC LIMIT -1 OFFSET ?", [.text(kind.rawValue), .integer(keep)]))
+            let cutoff = date.addingTimeInterval(-Double(retentionDays(for: kind)) * 86400)
             // Text ordering may advance slightly beyond the wall clock after
             // a clock correction. Expiry must use actual capture time, never
             // that ordering timestamp. The derivative index keeps it bounded.
             let sql = kind == .text
-                ? "SELECT i.payload FROM text_identity t JOIN items i ON i.id=t.item WHERE i.kind=? AND i.deleted IS NULL AND i.retained IS NULL AND t.captured<=?"
-                : "SELECT payload FROM items WHERE kind=? AND deleted IS NULL AND retained IS NULL AND created<=?"
-            expired += try LibrarySQL.decode(db.rows(sql, [.text(kind.rawValue), .real(cutoff.timeIntervalSince1970)])).filter { ($0.lastCapturedAt ?? $0.createdAt) <= cutoff }
+                ? "SELECT items.payload FROM text_identity ti JOIN items ON items.id=ti.item WHERE items.kind=? AND \(Self.unretainedLiveWhere) AND ti.captured<=?"
+                : "SELECT payload FROM items WHERE kind=? AND \(Self.unretainedLiveWhere) AND created<=?"
+            candidates += try LibrarySQL.decode(db.rows(sql, [.text(kind.rawValue), .real(cutoff.timeIntervalSince1970)])).filter { ($0.lastCapturedAt ?? $0.createdAt) <= cutoff }
         }
-        if !expired.isEmpty { try trash(expired.map(\.id)) }
+        // Anything in Trash for longer than the delay, retained or not. The
+        // item_order index starts with `deleted`, so this is a range read. A
+        // large backlog drains in bounded passes (each capture, hourly).
+        candidates += try LibrarySQL.decode(db.rows("SELECT payload FROM items WHERE deleted IS NOT NULL AND deleted<=? ORDER BY deleted LIMIT 500", [.real(date.addingTimeInterval(-Self.trashPurgeDelay).timeIntervalSince1970)]))
+        var seen = Set<UUID>()
+        return candidates.filter { seen.insert($0.id).inserted }
+    }
+    /// Deletes the rows and every row that refers to them, inside the caller's
+    /// transaction. Returns every file path the remaining rows still name.
+    private func purgeRows(_ ids: [UUID]) throws -> Set<String> {
+        let list = SQLValue.text(String(decoding: try JSONEncoder().encode(ids.map(\.uuidString)), as: UTF8.self))
+        let members = "IN (SELECT value FROM json_each(?))"
+        let tags = try db.rows("SELECT DISTINCT tag FROM item_tags WHERE item \(members)", [list]).compactMap { $0["tag"]?.string }
+        for sql in ["DELETE FROM item_tags WHERE item \(members)", "DELETE FROM item_collections WHERE item \(members)",
+                    "DELETE FROM text_identity WHERE item \(members)", "DELETE FROM image_analysis WHERE item \(members)",
+                    "DELETE FROM search_fts WHERE id \(members)", "DELETE FROM items WHERE id \(members)"] { try db.execute(sql, [list]) }
+        // A tag exists only while something carries it, as removeTag keeps it.
+        for tag in tags { try db.execute("DELETE FROM tags WHERE id=? AND NOT EXISTS(SELECT 1 FROM item_tags WHERE tag=?)", [.text(tag), .text(tag)]) }
+        var referenced = Set<String>()
+        let fields = ["path", "markupBasePath", "recordingOriginalPath", "originalPath", "thumbnailPath"]
+        let projection = fields.map { "json_extract(CAST(payload AS TEXT),'$.\($0)') AS \($0)" }.joined(separator: ",")
+        for row in try db.rows("SELECT \(projection) FROM items WHERE kind IN ('image','link')") {
+            for field in fields { if let path = row[field]?.string { referenced.insert(URL(fileURLWithPath: path).standardizedFileURL.path) } }
+        }
+        return referenced
+    }
+    /// Removes only files the app made for these items, inside its storage
+    /// root, that no remaining row (live or still in Trash) names. An
+    /// `originalPath` is never a candidate, and an external file never passes
+    /// the clipboard/managed-copy ownership test. A missing file is skipped;
+    /// a failed removal is logged and does not stop the others.
+    private func removeOwnedFiles(of records: [LibraryRecord], referenced: Set<String>) {
+        let storage = files.inbox.standardizedFileURL.path + "/"
+        let protected = referenced.union(recordingTrimPending)
+        func inside(_ url: URL) -> Bool {
+            let path = url.standardizedFileURL.path
+            return path.hasPrefix(storage) && url.resolvingSymlinksInPath().path == path && !protected.contains(path)
+        }
+        func idFile(_ folder: String, _ name: String) -> URL? {
+            let directory = files.inbox.appendingPathComponent(folder, isDirectory: true).standardizedFileURL
+            guard directory.resolvingSymlinksInPath().path == directory.path else { return nil }
+            return directory.appendingPathComponent(name)
+        }
+        var doomed = [URL]()
+        for record in records {
+            for path in [record.path, record.markupBasePath, record.recordingOriginalPath].compactMap({ $0 }) {
+                let url = URL(fileURLWithPath: path).standardizedFileURL
+                if files.isAppCopy(url), inside(url) { doomed.append(url) }
+            }
+            if let path = record.thumbnailPath {
+                let url = URL(fileURLWithPath: path).standardizedFileURL, folder = thumbnailsFolder.standardizedFileURL
+                if url.deletingLastPathComponent().path == folder.path, folder.resolvingSymlinksInPath().path == folder.path,
+                   url.lastPathComponent.hasPrefix("\(record.id.uuidString)-"), files.isRegularFile(url), inside(url) { doomed.append(url) }
+            }
+            let materialized = record.kind == .text ? idFile("Texts", "Text \(record.id).txt") : record.kind == .link ? idFile("Links", "Link \(record.id).webloc") : nil
+            if let url = materialized, files.isRegularFile(url), inside(url) { doomed.append(url) }
+        }
+        var seen = Set<String>()
+        for url in doomed where seen.insert(url.path).inserted {
+            do { try FileManager.default.removeItem(at: url) }
+            catch { if FileManager.default.fileExists(atPath: url.path) { log.error("Could not delete an expired app file") } }
+        }
     }
     func collections() throws -> [LibraryCollection] {
         try db.rows("SELECT * FROM collections ORDER BY folded,id").map { row in
@@ -1090,9 +1179,10 @@ extension String {
         if FileManager.default.fileExists(atPath: url.path) { _ = try FileManager.default.replaceItemAt(url, withItemAt: stage) }
         else { try FileManager.default.moveItem(at: stage, to: url) }
     }
-    private func changed(_ ids: [UUID] = []) {
+    /// Pass `kinds` when the rows are already gone and cannot be read back.
+    private func changed(_ ids: [UUID] = [], kinds: Set<LibraryKind>? = nil) {
         changedIDs = Set(ids)
-        changedKinds = ids.isEmpty ? Set(LibraryKind.allCases) : Set(ids.compactMap { try? item($0)?.kind })
+        changedKinds = kinds ?? (ids.isEmpty ? Set(LibraryKind.allCases) : Set(ids.compactMap { try? item($0)?.kind }))
         revision += 1
     }
     /// Used by local import and large synthetic fixtures. One transaction and

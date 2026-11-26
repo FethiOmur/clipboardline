@@ -203,7 +203,7 @@
 "Unorganized" = "Unorganized";
 "Unpin" = "Desafixar";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
-"Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Unsaved copies expire to recoverable Trash. Saved items and original files are kept.";
+"Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept." = "Cópias não salvas expiradas são apagadas permanentemente. Itens que você remove ficam um dia na Lixeira. Itens salvos e arquivos originais são mantidos.";
 "Untitled note" = "Untitled note";
 "Use Control or Command with a key" = "Use Control or Command with a key";
 "Use ⌃⌥L" = "Use ⌃⌥L";
@@ -547,3 +547,5 @@
 "Text copied" = "Texto copiado";
 "No text found in the selected area" = "Nenhum texto encontrado na área selecionada";
 "Allow screen recording for this app to copy text from the screen" = "Permita a gravação de tela para este app copiar texto da tela";
+"Keep newest unsaved" = "Manter os mais recentes não salvos";
+"%d of each type" = "%d de cada tipo";

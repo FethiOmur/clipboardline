@@ -203,7 +203,7 @@
 "Unorganized" = "Unorganized";
 "Unpin" = "Sabiti çıxar";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
-"Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Unsaved copies expire to recoverable Trash. Saved items and original files are kept.";
+"Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept." = "Müddəti bitən saxlanmamış nüsxələr həmişəlik silinir. Sildiyiniz elementlər bir gün Zibil qutusunda qalır. Saxlanmış elementlər və orijinal fayllar qorunur.";
 "Untitled note" = "Untitled note";
 "Use Control or Command with a key" = "Use Control or Command with a key";
 "Use ⌃⌥L" = "Use ⌃⌥L";
@@ -547,3 +547,5 @@
 "Text copied" = "Mətn kopyalandı";
 "No text found in the selected area" = "Seçilmiş sahədə mətn tapılmadı";
 "Allow screen recording for this app to copy text from the screen" = "Ekrandan mətn kopyalamaq üçün bu tətbiqə ekran yazısı icazəsi verin";
+"Keep newest unsaved" = "Saxlanmamışların ən yenilərini saxla";
+"%d of each type" = "Hər növdən %d";

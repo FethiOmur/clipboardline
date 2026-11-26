@@ -203,7 +203,7 @@
 "Unorganized" = "Unorganized";
 "Unpin" = "取消固定";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
-"Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Unsaved copies expire to recoverable Trash. Saved items and original files are kept.";
+"Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept." = "过期的未保存副本会被永久删除。你移除的项目会在废纸篓中保留一天。已保存的项目和原始文件会被保留。";
 "Untitled note" = "Untitled note";
 "Use Control or Command with a key" = "使用 Control 或 Command 加一个键";
 "Use ⌃⌥L" = "Use ⌃⌥L";
@@ -547,3 +547,5 @@
 "Text copied" = "文字已复制";
 "No text found in the selected area" = "所选区域中未找到文字";
 "Allow screen recording for this app to copy text from the screen" = "请允许此应用录制屏幕，以便复制屏幕上的文字";
+"Keep newest unsaved" = "保留最新的未保存项目";
+"%d of each type" = "每种类型 %d 个";

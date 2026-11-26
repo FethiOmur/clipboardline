@@ -203,7 +203,7 @@
 "Unorganized" = "Unorganized";
 "Unpin" = "고정 해제";
 "Unsaved copies are kept for %d days" = "Unsaved copies are kept for %d days";
-"Unsaved copies expire to recoverable Trash. Saved items and original files are kept." = "Unsaved copies expire to recoverable Trash. Saved items and original files are kept.";
+"Expired unsaved copies are deleted permanently. Items you remove stay in Trash for a day. Saved items and original files are kept." = "만료된 저장하지 않은 사본은 영구적으로 삭제됩니다. 제거한 항목은 하루 동안 휴지통에 남습니다. 저장한 항목과 원본 파일은 유지됩니다.";
 "Untitled note" = "Untitled note";
 "Use Control or Command with a key" = "Use Control or Command with a key";
 "Use ⌃⌥L" = "Use ⌃⌥L";
@@ -547,3 +547,5 @@
 "Text copied" = "텍스트를 복사했습니다";
 "No text found in the selected area" = "선택한 영역에서 텍스트를 찾을 수 없습니다";
 "Allow screen recording for this app to copy text from the screen" = "화면에서 텍스트를 복사하려면 이 앱에 화면 기록을 허용하세요";
+"Keep newest unsaved" = "저장하지 않은 최신 항목 유지";
+"%d of each type" = "종류별 %d개";

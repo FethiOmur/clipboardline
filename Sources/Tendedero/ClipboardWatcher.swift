@@ -104,7 +104,7 @@ final class ClipboardWatcher {
         // because Finder also advertises a TIFF/PNG of the file's icon.
         guard !items.contains(where: { types in
             types.contains(.fileURL) || !Self.privateTypes.isDisjoint(with: types)
-        }), source.changeCount == count else { return }
+        }), !Self.isTextCopy(items), source.changeCount == count else { return }
 
         for (index, types) in items.enumerated() {
             for type in [NSPasteboard.PasteboardType.png, .tiff] where types.contains(type) {
@@ -118,6 +118,37 @@ final class ClipboardWatcher {
                 return // A clipboard screenshot is one image, even with multiple representations.
             }
         }
+    }
+
+    static let plainTextTypes: Set<NSPasteboard.PasteboardType> = [
+        "public.utf8-plain-text", "public.utf16-plain-text", "public.utf16-external-plain-text", "public.plain-text", "NSStringPboardType"
+    ].reduce(into: []) { $0.insert(NSPasteboard.PasteboardType($1)) }
+    static let richTextTypes: Set<NSPasteboard.PasteboardType> = [
+        "public.rtf", "NeXT Rich Text Format v1.0 pasteboard type", "com.apple.flat-rtfd", "com.apple.rtfd", "NeXT RTFD pasteboard type"
+    ].reduce(into: []) { $0.insert(NSPasteboard.PasteboardType($1)) }
+    static let htmlTypes: Set<NSPasteboard.PasteboardType> = [
+        "public.html", "Apple HTML pasteboard type"
+    ].reduce(into: []) { $0.insert(NSPasteboard.PasteboardType($1)) }
+    static let urlTypes: Set<NSPasteboard.PasteboardType> = [
+        "public.url", "public.url-name", "Apple URL pasteboard type", "WebURLsWithTitlesPboardType"
+    ].reduce(into: []) { $0.insert(NSPasteboard.PasteboardType($1)) }
+
+    /// A text copy that also offers a picture of the text, as Office, Keynote,
+    /// Pages and other rich-text apps do, is ignored entirely. Decided from
+    /// the type names alone, before any bytes are read:
+    /// - no text type: an image copy (screenshot to the clipboard, Preview,
+    ///   image editors, Chrome's Copy Image with PNG and HTML);
+    /// - text with a URL type: a browser image copy (WebKit's Copy Image adds
+    ///   the image's URL as public.url, plain text and RTFD);
+    /// - otherwise rich text (RTF/RTFD), or plain text without HTML, marks a
+    ///   text copy. Plain text with HTML and no rich text is a web image copy
+    ///   (Firefox adds the image URL as text and an img tag as HTML).
+    static func isTextCopy(_ items: [[NSPasteboard.PasteboardType]]) -> Bool {
+        let types = Set(items.joined())
+        let rich = !richTextTypes.isDisjoint(with: types)
+        guard rich || !plainTextTypes.isDisjoint(with: types) else { return false }
+        if !urlTypes.isDisjoint(with: types) { return false }
+        return rich || htmlTypes.isDisjoint(with: types)
     }
 
     /// Validate format and resource bounds before decoding. PNG bytes stay unchanged;
